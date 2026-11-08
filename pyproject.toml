@@ -30,6 +30,15 @@ packages = ["src/powerops"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
+[tool.coverage.run]
+branch = true
+source = ["powerops"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = false
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

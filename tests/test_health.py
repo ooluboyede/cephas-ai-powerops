@@ -11,7 +11,12 @@ def test_liveness_is_explicitly_process_only() -> None:
     assert response.json() == {"status": "alive", "service": "powerops"}
 
 
-def test_readiness_reports_foundation_stage() -> None:
+def test_readiness_is_explicitly_limited_to_bootstrap() -> None:
     response = client.get("/health/ready")
     assert response.status_code == 200
-    assert response.json() == {"status": "ready", "stage": "foundation"}
+    assert response.json() == {
+        "status": "ready",
+        "stage": "foundation",
+        "readiness_scope": "bootstrap_only",
+        "dependency_checks": "not_configured",
+    }

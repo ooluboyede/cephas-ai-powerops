@@ -29,11 +29,13 @@ CI run: [#13 — Run ID 42689068420](https://github.com/ooluboyede/cephas-ai-pow
 
 The 100% coverage result applies only to the current small foundation and does not demonstrate broad application reliability.
 
-## Remaining maintenance work
+## Maintenance status
 
-- Upgrade GitHub Actions to Node.js 24-compatible releases, retaining full SHA pinning.
-- Expand automated tests as new application functionality is introduced.
-- Preserve the 90% coverage minimum.
+- Node.js 24-compatible GitHub Actions releases are implemented and pinned to full commit SHAs.
+- The updated workflow passed CI on commit `2873f57e3381c51c0573b94427eae599663a3046`.
+- No Node.js 20 runtime deprecation warning appeared in the supplied CI logs.
+- Expand automated tests as application functionality grows.
+- Preserve the 90% minimum coverage gate.
 
 ## Release boundaries
 
@@ -47,6 +49,4 @@ The 100% coverage result applies only to the current small foundation and does n
 
 ## Independent retest decision
 
-PASS — Original F-01, F-02, F-03 and F-04 findings closed.
-
-The independent reviewer recommends accepting the remediation and tracking the Node.js runtime warning as a separate maintenance follow-up.
+The original F-01 to F-04 findings are closed. The subsequent Node.js 24 workflow maintenance update has also passed the supplied CI validation.

@@ -13,14 +13,11 @@ CI run: [#13 — Run ID 42689068420](https://github.com/ooluboyede/cephas-ai-pow
 
 | Finding | Status | Evidence |
 |---|---|---|
-| F-01 — Dependency reproducibility | CLOSED | Committed uv.lock, locked installation, resolved package hashes, successful CI |
-| F-02 — Readiness semantics | CLOSED | Explicit bootstrap-only readiness contract and exact response tests |
-| F-03 — Coverage enforcement | CLOSED | Branch coverage and enforced 90% minimum; CI achieved 100% |
+| F-01 — Dependency reproducibility | CLOSED | Committed uv.lock, locked installation and successful CI |
+| F-02 — Readiness semantics | CLOSED | Explicit bootstrap-only readiness contract and response tests |
+| F-03 — Coverage enforcement | CLOSED | Enforced 90% minimum; CI achieved 100% |
 | F-04 — GitHub Actions SHA pinning | CLOSED | Checkout and setup-python pinned to full commit SHAs |
-| Starlette/httpx deprecation | RESOLVED | No longer reproduced in latest CI |
-| Documentation consistency | FOLLOW-UP | Evidence register and PR description updated after independent retest |
-| GitHub Actions Node.js 20 runtime warning | FOLLOW-UP | Upgrade to Node.js 24-compatible action releases while retaining full SHA pinning |
-| Broader automated test coverage | FUTURE WORK | Expand tests as application functionality grows |
+| Starlette/httpx deprecation | RESOLVED | Warning no longer reproduced in latest CI |
 
 ## Verified CI results
 
@@ -30,21 +27,26 @@ CI run: [#13 — Run ID 42689068420](https://github.com/ooluboyede/cephas-ai-pow
 - Pytest: PASS — 4 tests
 - Coverage: PASS — 100% (22 statements)
 
-The 100% result applies to the current small foundation and does not demonstrate broad application reliability.
+The 100% coverage result applies only to the current small foundation and does not demonstrate broad application reliability.
+
+## Remaining maintenance work
+
+- Upgrade GitHub Actions to Node.js 24-compatible releases, retaining full SHA pinning.
+- Expand automated tests as new application functionality is introduced.
+- Preserve the 90% coverage minimum.
 
 ## Release boundaries
 
 - This closes the original F-01 to F-04 remediation findings only.
 - The reviewed revision is not production certified.
-- No penetration-test certification is claimed.
-- No authentication, tenant membership verification, PostgreSQL RLS or persistent audit system is certified.
+- Authentication, tenant membership verification, PostgreSQL RLS and persistent audit storage are not yet certified.
 - No live IBEDC integrations or SCADA/DMS operational controls are included.
 - Qualified power-systems engineering review remains required.
-- PR #1 and PR #2 must remain unmerged until their respective change-control requirements are satisfied.
+- PR #1 and PR #2 remain unmerged pending their respective change-control requirements.
 - Future dependency integrations must introduce real readiness checks and failure behaviour.
 
 ## Independent retest decision
 
 PASS — Original F-01, F-02, F-03 and F-04 findings closed.
 
-Independent reviewer recommends accepting the remediation, updating the evidence register and PR description, and tracking the Node.js runtime warning as a separate maintenance follow-up.
+The independent reviewer recommends accepting the remediation and tracking the Node.js runtime warning as a separate maintenance follow-up.

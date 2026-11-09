@@ -2,12 +2,19 @@
 
 Baseline reviewed: `59dd7ac95f403a465e2f01e366198027af9c6832`
 
-Remediation commit independently retested:
+Original remediation commit independently retested:
 `5161d59dd65970e7058a3bc9aacc85abf8487abf`
 
-Independent retest date: 9 November 2026
+Latest pre-hardening PR head independently reviewed:
+`51f62544badd1645cd57c97218e7af9e779f1718`
 
-CI run: [#13 — Run ID 42689068420](https://github.com/ooluboyede/cephas-ai-powerops/actions/runs/42689068420)
+Independent review date: 9 November 2026
+
+Earlier remediation CI run: [#13 — Run ID 42689068420](https://github.com/ooluboyede/cephas-ai-powerops/actions/runs/42689068420)
+
+Latest pre-hardening PR validation: [#21 — Run ID 42697589984](https://github.com/ooluboyede/cephas-ai-powerops/actions/runs/42697589984)
+
+The PR validation used synthetic merge commit `23f5d59d871a991fff7954d8c4074732ff68d16f`, combining the reviewed PR head with its target branch. It validates the proposed combined PR result, not a standalone run on the PR head.
 
 ## Finding closure register
 
@@ -17,9 +24,11 @@ CI run: [#13 — Run ID 42689068420](https://github.com/ooluboyede/cephas-ai-pow
 | F-02 — Readiness semantics | CLOSED | Explicit bootstrap-only readiness contract and response tests |
 | F-03 — Coverage enforcement | CLOSED | Enforced 90% minimum; CI achieved 100% |
 | F-04 — GitHub Actions SHA pinning | CLOSED | Checkout and setup-python pinned to full commit SHAs |
-| Starlette/httpx deprecation | RESOLVED | Warning no longer reproduced in latest CI |
+| Starlette/httpx deprecation | RESOLVED | Warning no longer reproduced in reviewed CI |
+| F-05 — Checkout credential persistence | REMEDIATED; RETEST PENDING | Set checkout `persist-credentials: false`; require a successful post-change CI run |
+| F-06 — Latest evidence traceability | ADDRESSED | This document records the latest pre-hardening head and CI run evidence |
 
-## Verified CI results
+## Verified CI results before F-05 hardening
 
 - Locked dependency installation: PASS
 - Ruff: PASS
@@ -29,13 +38,14 @@ CI run: [#13 — Run ID 42689068420](https://github.com/ooluboyede/cephas-ai-pow
 
 The 100% coverage result applies only to the current small foundation and does not demonstrate broad application reliability.
 
-## Maintenance status
+## Maintenance and supply-chain notes
 
 - Node.js 24-compatible GitHub Actions releases are implemented and pinned to full commit SHAs.
-- The updated workflow passed CI on commit `2873f57e3381c51c0573b94427eae599663a3046`.
-- No Node.js 20 runtime deprecation warning appeared in the supplied CI logs.
+- Checkout and setup-python action revisions were verified to declare the Node.js 24 runtime.
+- The `uv` bootstrap is version-pinned to `uv==0.13.7`; its installer artifact is not independently hash-verified. This remains a future supply-chain hardening opportunity, not a reopening of F-01.
 - Expand automated tests as application functionality grows.
 - Preserve the 90% minimum coverage gate.
+- F-05 hardening disables persisted checkout credentials. The post-change CI result must be recorded before PR approval.
 
 ## Release boundaries
 
@@ -47,6 +57,8 @@ The 100% coverage result applies only to the current small foundation and does n
 - PR #1 and PR #2 remain unmerged pending their respective change-control requirements.
 - Future dependency integrations must introduce real readiness checks and failure behaviour.
 
-## Independent retest decision
+## Independent review decision
 
-The original F-01 to F-04 findings are closed. The subsequent Node.js 24 workflow maintenance update has also passed the supplied CI validation.
+The independent reviewer returned PASS WITH CONDITIONS for PR head `51f62544badd1645cd57c97218e7af9e779f1718`: F-01 to F-04 closed, with low-severity F-05 checkout credential hardening recommended and F-06 evidence traceability improvement noted.
+
+F-05 has now been implemented on the PR branch by setting `persist-credentials: false`. Its closure is conditional on successful post-change CI and reviewer confirmation. Do not treat this document as production certification or merge authorization.

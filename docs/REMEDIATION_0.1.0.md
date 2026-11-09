@@ -29,13 +29,17 @@ Earlier documentation-head validation: [#27 — Run ID 42699951238](https://gith
 
 Latest documentation-revision validation: [#29 — Run ID 42700706546](https://github.com/ooluboyede/cephas-ai-powerops/actions/runs/42700706546)
 
+Current documentation correction validation: [#31 — Run ID 42701723314](https://github.com/ooluboyede/cephas-ai-powerops/actions/runs/42701723314)
+
 Run #21 used synthetic merge commit `23f5d59d871a991fff7954d8c4074732ff68d16f`, combining the reviewed PR head with its target branch. It validates the proposed combined PR result, not a standalone run on the PR head.
 
 Run #24 is the successful post-hardening CI run associated with exact PR head `3fb4df13f0c9b7cdb04376d1448cab65ac5be120`. The independent reviewer confirmed that the quality job completed successfully, including checkout, locked dependency installation, Ruff, Mypy and tests.
 
 Run #27 is the successful `pull_request` CI run associated with exact documentation PR head `ea73492e84eb358d7a350db481f156d9fd963e94`, targeting `feat/0.1.0-platform-foundation`. The reviewer independently verified that the run's head SHA and PR number match PR #2, and that checkout, dependency installation, Ruff, Mypy and tests all passed.
 
-Run #29 is the successful `pull_request` CI run associated with exact PR #2 head `ff656e17747cb515ad42de7f3e481910e1647804`, targeting `feat/0.1.0-platform-foundation`. The reviewer independently verified the matching head SHA and PR event. The quality job passed checkout, pinned tool setup, locked dependency installation, Ruff, Mypy and tests. This run validates commit `ff656e1...`; it does not validate the subsequent documentation correction being made in the current revision.
+Run #29 is the successful `pull_request` CI run associated with exact PR #2 head `ff656e17747cb515ad42de7f3e481910e1647804`, targeting `feat/0.1.0-platform-foundation`. The reviewer independently verified the matching head SHA and PR event. The quality job passed checkout, pinned tool setup, locked dependency installation, Ruff, Mypy and tests. This run validates commit `ff656e1...`; it does not validate the subsequent documentation correction made in the current revision.
+
+Run #31 is the successful `pull_request` CI run associated with exact PR #2 head `bb7f168c5da361bbb341df86338d591bf16925af`, targeting `feat/0.1.0-platform-foundation`. The workflow-run record and job details were independently checked. The head SHA matches exactly. Checkout, pinned Python setup, pinned `uv` installation, locked dependency installation, Ruff, Mypy and tests all passed. CI #31 validates the `bb7f168...` revision; it does not validate this subsequent F-06 correction.
 
 ## Finding closure register
 
@@ -47,7 +51,7 @@ Run #29 is the successful `pull_request` CI run associated with exact PR #2 head
 | F-04 — GitHub Actions SHA pinning | CLOSED | Checkout and setup-python pinned to full commit SHAs |
 | Starlette/httpx deprecation | RESOLVED | Warning no longer reproduced in reviewed CI |
 | F-05 — Checkout credential persistence | CLOSED | Checkout explicitly sets `persist-credentials: false`; exact hardening head independently verified and post-hardening CI #24 passed |
-| F-06 — Evidence traceability | OPEN — CORRECTION IN THIS REVISION; RETEST PENDING | The reviewer found that commit `ff656e17747cb515ad42de7f3e481910e1647804` and CI #29 were omitted from the preceding version of this evidence document. This revision records both and records the actual NOT APPROVED retest disposition. The new documentation commit and its CI result still require verification. |
+| F-06 — Evidence traceability | OPEN — CORRECTION REQUIRED; RETEST PENDING | Independent retest of `bb7f168c5da361bbb341df86338d591bf16925af` found that this document omitted that exact head, CI #31 / run ID `42701723314`, its successful result, and the outcome of the retest. It also retained stale pending-review statements. This revision corrects those omissions; the new commit and its CI result require fresh independent verification. |
 
 ## Verified CI results
 
@@ -109,6 +113,12 @@ The 100% coverage result from the earlier validation applies only to the current
 - PR #1 and PR #2 remain unmerged pending their respective change-control requirements.
 - Future dependency integrations must introduce real readiness checks and failure behaviour.
 
+## Current F-06 retest evidence
+
+The independent retest of exact PR #2 head `bb7f168c5da361bbb341df86338d591bf16925af` returned **NOT APPROVED**. CI #31 (run ID `42701723314`) succeeded against that exact head, but the reviewer found that this document did not record the latest head or CI result and retained stale pending-review language. Accordingly, F-06 remained OPEN at that reviewed revision. No new material application-code or CI-workflow finding was identified. The reviewer did not submit formal GitHub approval because the available GitHub identity `ooluboyede` is also the PR author and is not an independent reviewer identity.
+
+This current commit is intended to correct that documentation finding by recording the exact prior reviewed head, CI #31 evidence, successful exact-head match, and actual NOT APPROVED / F-06 OPEN disposition. The CI run and independent retest for this new commit are pending. F-06 must remain OPEN until a genuinely independent reviewer verifies this exact revision and explicitly closes the finding.
+
 ## Independent review history and current disposition
 
 1. The original independent remediation retest returned PASS for F-01 to F-04 on commit `5161d59dd65970e7058a3bc9aacc85abf8487abf`.
@@ -117,6 +127,7 @@ The 100% coverage result from the earlier validation applies only to the current
 4. The reviewer verified that documentation head `ea73492e84eb358d7a350db481f156d9fd963e94` passed CI run #27 (run ID `42699951238`) on PR #2, with the exact matching head SHA and target branch. However, the reviewer found that the evidence document omitted that documentation commit and run, and retained a stale sentence implying approval was recommended after the document update.
 5. The reviewer's retest of `ea73492e84eb358d7a350db481f156d9fd963e94` was **NOT APPROVED**. F-01 through F-05 were closed; F-06 remained open because the document did not record the latest head and CI evidence. No new material code or workflow finding was identified.
 6. The next documentation revision was commit `ff656e17747cb515ad42de7f3e481910e1647804`. CI #29 (run ID `42700706546`) passed against that exact commit. The reviewer verified the PR event, head SHA, target branch and successful quality job. The final retest was **NOT APPROVED** because this evidence document still omitted commit `ff656e1...` and CI #29, and still described that revision's CI/retest as pending. F-01 through F-05 remained CLOSED; F-06 remained OPEN. The reviewer submitted a COMMENTED review, not an approval.
-7. This revision records the exact `ff656e1...` commit, CI #29 and the actual NOT APPROVED retest outcome, preserving the earlier review history. The CI run and independent retest for this new documentation revision are pending and must be recorded after they occur. F-06 remains OPEN until the reviewer verifies this correction and explicitly closes it.
+7. Commit `bb7f168c5da361bbb341df86338d591bf16925af` was then independently retested. CI #31 (run ID `42701723314`) passed against that exact head. The retest was **NOT APPROVED** because this document omitted the latest head and CI #31 evidence and retained stale pending-review statements. F-01 through F-05 remained CLOSED; F-06 remained OPEN. No new material application-code or CI-workflow finding was identified. Formal GitHub approval was not submitted because the available identity was the PR author, not an independent reviewer.
+8. The current documentation correction records the exact `bb7f168...` head, CI #31 and its successful exact-head result, plus the actual NOT APPROVED / F-06 OPEN outcome. A fresh CI run and independent retest of this new commit are required. F-06 remains OPEN until that independent retest explicitly closes it.
 
 No approval, merge or deployment is implied by this evidence document. PR #2 must remain open, draft and unmerged until the independent reviewer completes the final retest and the repository owner separately authorizes any merge.

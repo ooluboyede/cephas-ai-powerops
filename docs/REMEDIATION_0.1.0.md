@@ -35,6 +35,8 @@ Latest F-06 evidence correction validation: [#33 — Run ID 42703221997](https:/
 
 Retest of the preceding documentation correction: [#35 — Run ID 42704671986](https://github.com/ooluboyede/cephas-ai-powerops/actions/runs/42704671986)
 
+Independent retest of documentation commit `db3b0f58eed50d70021c7b661f828339b41cc836`: **NOT APPROVED — F-06 OPEN**. The reviewer verified successful CI #37 (run ID `42706300920`) on the exact PR #2 head SHA, with `pull_request` event and successful quality job. The reviewer found that this document omitted the `db3b0f58...` commit and CI #37 evidence, retained stale F-06 pending language, and did not include this retest in its review history. This correction records that retest outcome; it does not close F-06.
+
 Run #21 used synthetic merge commit `23f5d59d871a991fff7954d8c4074732ff68d16f`, combining the reviewed PR head with its target branch. It validates the proposed combined PR result, not a standalone run on the PR head.
 
 Run #24 is the successful post-hardening CI run associated with exact PR head `3fb4df13f0c9b7cdb04376d1448cab65ac5be120`. The independent reviewer confirmed that the quality job completed successfully, including checkout, locked dependency installation, Ruff, Mypy and tests.
@@ -57,7 +59,7 @@ Run #31 is the successful `pull_request` CI run associated with exact PR #2 head
 | F-04 — GitHub Actions SHA pinning | CLOSED | Checkout and setup-python pinned to full commit SHAs |
 | Starlette/httpx deprecation | RESOLVED | Warning no longer reproduced in reviewed CI |
 | F-05 — Checkout credential persistence | CLOSED | Checkout explicitly sets `persist-credentials: false`; exact hardening head independently verified and post-hardening CI #24 passed |
-| F-06 — Evidence traceability | OPEN — CURRENT DOCUMENTATION CORRECTION REQUIRED; INDEPENDENT RETEST PENDING | The retest of documentation commit `0a277b37fb8d974e33ca3726b60692a51ae03a84` returned NOT APPROVED: although CI #35 / run ID `42704671986` succeeded against that commit, the document still omitted the exact `0a277b3...` head and CI #35 result, and retained stale statements that treated CI #33 as the latest evidence and described the previous correction as current. This revision must record the preceding failed retest and the present correction accurately. F-06 remains OPEN pending a fresh CI run and a genuinely independent retest of the new exact head. |
+| F-06 — Evidence traceability | OPEN — CURRENT CORRECTION REQUIRED; FRESH CI AND INDEPENDENT RETEST PENDING | The independent retest of `db3b0f58eed50d70021c7b661f828339b41cc836` returned NOT APPROVED. CI #37 / run ID `42706300920` succeeded on the exact PR #2 head SHA (`pull_request` event; PR #2 association verified), but this document omitted that exact commit and CI result, retained stale pending-review language, and lacked the current retest history entry. This revision records the `db3b0f58...` / CI #37 evidence and the actual NOT APPROVED outcome. F-06 remains OPEN pending fresh CI on this correction and another genuinely independent exact-head retest. |
 
 ## Verified CI results
 
@@ -111,7 +113,7 @@ The 100% coverage result from the earlier validation applies only to the current
 ## Release boundaries
 
 - F-01 through F-05 are closed based on the recorded independent reviews and CI evidence.
-- F-06 remains OPEN. The preceding documentation commit `0a277b37fb8d974e33ca3726b60692a51ae03a84` passed CI #35 / run ID `42704671986`, but its evidence document was retested NOT APPROVED because it omitted that exact commit and CI #35 and retained stale CI #33 references. This new correction requires its own fresh CI run and a genuinely independent exact-head retest.
+- F-06 remains OPEN. Documentation commit `db3b0f58eed50d70021c7b661f828339b41cc836` passed CI #37 / run ID `42706300920` on the exact PR #2 head SHA (`pull_request` event; PR #2 association verified), with the quality job successful. Its independent retest was NOT APPROVED because this evidence document omitted that exact commit and CI #37, retained stale F-06 pending statements, and lacked the current review-history entry. This correction records that outcome. It requires fresh CI on the resulting new commit and another genuinely independent exact-head retest.
 - The reviewed revision is not production certified.
 - Authentication, tenant membership verification, PostgreSQL RLS and persistent audit storage are not yet certified.
 - No live IBEDC integrations or SCADA/DMS operational controls are included.
@@ -123,11 +125,13 @@ The 100% coverage result from the earlier validation applies only to the current
 
 The independent retest of documentation commit `0a277b37fb8d974e33ca3726b60692a51ae03a84` returned **NOT APPROVED**. CI #35 (run ID `42704671986`) succeeded against that exact commit, and the quality job passed checkout, pinned tool setup, locked dependency installation, Ruff, Mypy and tests. However, the reviewer found that this evidence document still omitted the exact `0a277b3...` commit and CI #35 result. It also retained stale language identifying CI #33 as the latest evidence correction and describing the previous documentation correction as awaiting a fresh CI run. F-06 therefore remained OPEN at that reviewed revision. No new material application-code or workflow finding was identified.
 
+The independent retest of exact PR #2 head `db3b0f58eed50d70021c7b661f828339b41cc836` returned **NOT APPROVED — F-06 OPEN**. CI #37 (run ID `42706300920`) completed successfully against that exact head SHA. The workflow event was `pull_request`, the run was associated with PR #2, and the recorded head SHA matched the reviewed commit. The quality job passed checkout, pinned Python setup, pinned `uv` installation, locked dependency installation, Ruff, Mypy and tests. The reviewer nevertheless found that this evidence document omitted the exact `db3b0f58...` commit and CI #37 result, retained stale F-06 pending-review statements, and lacked a review-history entry for this retest. This revision records those facts and preserves the NOT APPROVED outcome. No new application-code or workflow finding was identified.
+
 The prior retest of exact PR #2 head `73d54cf757cb83c8b6a9a0baf2008228a1f77e99` returned **NOT APPROVED**. CI #33 (run ID `42703221997`) succeeded against that exact PR head: the workflow was a `pull_request` run for PR #2, and its recorded head SHA matched the reviewed commit. The quality job passed checkout, pinned Python setup, pinned `uv` installation, locked dependency installation, Ruff, Mypy and tests. However, the reviewer found that this evidence document did not record commit `73d54cf...`, CI #33 / run ID `42703221997`, or the actual NOT APPROVED outcome, and retained stale pending-review statements. F-06 therefore remained OPEN at that reviewed revision. No new material application-code or workflow finding was identified.
 
 The reviewer submitted a COMMENT review (review ID `5833117504`) against the exact reviewed commit, not a formal approval. The available GitHub identity `ooluboyede` is also the PR author and cannot establish independent reviewer approval. The review outcome must remain NOT APPROVED until a genuinely independent reviewer retests a corrected exact-head revision and explicitly closes F-06.
 
-This revision records both the preceding documentation retest failure (`0a277b37...`, CI #35 / run ID `42704671986`, NOT APPROVED) and the historical `73d54cf...` / CI #33 outcome. It does not claim F-06 is closed. A fresh commit and CI run must validate this correction, followed by a genuinely independent retest of that new exact commit.
+This revision records the NOT APPROVED retest of `db3b0f58...` / CI #37, the preceding `0a277b37...` / CI #35 failure, and the historical `73d54cf...` / CI #33 outcome. It does not claim F-06 is closed. Fresh CI must validate this correction, followed by another genuinely independent retest of its exact new commit.
 
 ## Independent review history and current disposition
 

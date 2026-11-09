@@ -8,13 +8,20 @@ Original remediation commit independently retested:
 Latest pre-hardening PR head independently reviewed:
 `51f62544badd1645cd57c97218e7af9e779f1718`
 
+Final F-05 hardening head independently verified:
+`3fb4df13f0c9b7cdb04376d1448cab65ac5be120`
+
 Independent review date: 9 November 2026
 
 Earlier remediation CI run: [#13 — Run ID 42689068420](https://github.com/ooluboyede/cephas-ai-powerops/actions/runs/42689068420)
 
 Latest pre-hardening PR validation: [#21 — Run ID 42697589984](https://github.com/ooluboyede/cephas-ai-powerops/actions/runs/42697589984)
 
-The PR validation used synthetic merge commit `23f5d59d871a991fff7954d8c4074732ff68d16f`, combining the reviewed PR head with its target branch. It validates the proposed combined PR result, not a standalone run on the PR head.
+Final post-hardening CI validation: [#24 — Run ID 42699257051](https://github.com/ooluboyede/cephas-ai-powerops/actions/runs/42699257051)
+
+The PR validation in run #21 used synthetic merge commit `23f5d59d871a991fff7954d8c4074732ff68d16f`, combining the reviewed PR head with its target branch. It validates the proposed combined PR result, not a standalone run on the PR head.
+
+Run #24 is the successful post-hardening CI run associated with exact PR head `3fb4df13f0c9b7cdb04376d1448cab65ac5be120`. The independent reviewer confirmed that the quality job completed successfully, including checkout, locked dependency installation, Ruff, Mypy and tests.
 
 ## Finding closure register
 
@@ -25,31 +32,39 @@ The PR validation used synthetic merge commit `23f5d59d871a991fff7954d8c4074732f
 | F-03 — Coverage enforcement | CLOSED | Enforced 90% minimum; CI achieved 100% |
 | F-04 — GitHub Actions SHA pinning | CLOSED | Checkout and setup-python pinned to full commit SHAs |
 | Starlette/httpx deprecation | RESOLVED | Warning no longer reproduced in reviewed CI |
-| F-05 — Checkout credential persistence | REMEDIATED; RETEST PENDING | Set checkout `persist-credentials: false`; require a successful post-change CI run |
-| F-06 — Latest evidence traceability | ADDRESSED | This document records the latest pre-hardening head and CI run evidence |
+| F-05 — Checkout credential persistence | CLOSED | Checkout explicitly sets `persist-credentials: false`; exact head independently verified and post-hardening CI #24 passed |
+| F-06 — Latest evidence traceability | ADDRESSED | This document records the final head and post-hardening CI evidence |
 
-## Verified CI results before F-05 hardening
+## Verified CI results
 
+Earlier remediation CI #13:
 - Locked dependency installation: PASS
 - Ruff: PASS
 - Mypy: PASS — 3 source files
 - Pytest: PASS — 4 tests
 - Coverage: PASS — 100% (22 statements)
 
-The 100% coverage result applies only to the current small foundation and does not demonstrate broad application reliability.
+Final post-hardening CI #24:
+- Checkout with `persist-credentials: false`: PASS
+- Locked dependency installation: PASS
+- Ruff: PASS
+- Mypy: PASS
+- Tests: PASS
+
+The 100% coverage result from the earlier validation applies only to the current small foundation and does not demonstrate broad application reliability.
 
 ## Maintenance and supply-chain notes
 
 - Node.js 24-compatible GitHub Actions releases are implemented and pinned to full commit SHAs.
 - Checkout and setup-python action revisions were verified to declare the Node.js 24 runtime.
+- Checkout credential persistence is explicitly disabled with `persist-credentials: false`.
 - The `uv` bootstrap is version-pinned to `uv==0.13.7`; its installer artifact is not independently hash-verified. This remains a future supply-chain hardening opportunity, not a reopening of F-01.
 - Expand automated tests as application functionality grows.
 - Preserve the 90% minimum coverage gate.
-- F-05 hardening disables persisted checkout credentials. The post-change CI result must be recorded before PR approval.
 
 ## Release boundaries
 
-- This closes the original F-01 to F-04 remediation findings only.
+- F-01 through F-05 are closed based on the recorded independent reviews and CI evidence.
 - The reviewed revision is not production certified.
 - Authentication, tenant membership verification, PostgreSQL RLS and persistent audit storage are not yet certified.
 - No live IBEDC integrations or SCADA/DMS operational controls are included.
@@ -61,4 +76,6 @@ The 100% coverage result applies only to the current small foundation and does n
 
 The independent reviewer returned PASS WITH CONDITIONS for PR head `51f62544badd1645cd57c97218e7af9e779f1718`: F-01 to F-04 closed, with low-severity F-05 checkout credential hardening recommended and F-06 evidence traceability improvement noted.
 
-F-05 has now been implemented on the PR branch by setting `persist-credentials: false`. Its closure is conditional on successful post-change CI and reviewer confirmation. Do not treat this document as production certification or merge authorization.
+The reviewer subsequently independently verified F-05 on exact PR head `3fb4df13f0c9b7cdb04376d1448cab65ac5be120`. The workflow explicitly sets `persist-credentials: false`, and successful post-hardening CI run #24 (run ID `42699257051`) completed checkout, locked dependency installation, Ruff, Mypy and tests. F-05 is CLOSED.
+
+The reviewer recommends APPROVE PR #2 after this evidence document is updated. This document is not production certification or merge authorization. No GitHub approval, merge or deployment is implied.

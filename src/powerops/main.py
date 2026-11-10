@@ -15,11 +15,21 @@ app = FastAPI(
 
 @app.get("/health/live", tags=["operations"])
 def liveness() -> dict[str, str]:
-    """Process liveness only; does not imply database or integration readiness."""
+    """Process liveness only; does not imply dependency readiness."""
     return {"status": "alive", "service": "powerops"}
 
 
 @app.get("/health/ready", tags=["operations"])
 def readiness() -> dict[str, str]:
-    """Bootstrap readiness; dependency checks will be added with infrastructure."""
-    return {"status": "ready", "stage": "foundation"}
+    """Report bootstrap readiness without implying unimplemented dependencies are healthy.
+
+    The foundation has no database or utility connectors to probe. When required
+    dependencies are introduced, this endpoint must check them and return a
+    non-2xx response whenever a required dependency is unavailable.
+    """
+    return {
+        "status": "ready",
+        "stage": "foundation",
+        "readiness_scope": "bootstrap_only",
+        "dependency_checks": "not_configured",
+    }

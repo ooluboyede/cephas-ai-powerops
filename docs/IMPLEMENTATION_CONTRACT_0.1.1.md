@@ -625,3 +625,129 @@ For every discovery and JWKS request:
 | IC-06-R2 | Medium | Topology ADR remains OPEN | Approved topology decision record |
 
 This section does not close the findings by documentation alone. It does not select deployment-specific principals, numerical limits, pooler, provider or topology without deployment-owner approval. All affected implementation gates remain blocked until their prerequisites, implementation and reproducible evidence are independently verified. No production deployment, customer-data processing, certification, live utility integration or SCADA/DMS operational activation is authorised.
+
+
+## 18. Independent security re-review remediation — IC-01-R4 and IC-04-R4
+
+**Review decision addressed:** APPROVED WITH CONDITIONS  
+**Prior exact reviewed commit:** `1991f2c0f17ee218a406481c08e8ff2066b1eb5e`  
+**Scope:** additional contract and acceptance-test requirements only. This section does not claim implementation evidence or close deployment-owner decisions.
+
+### IC-01-R4 — Cryptographically bound exceptional removal and retirement-intent fencing (Medium)
+
+#### Exceptional-removal request and approval protocol
+
+An exceptional-removal request must be represented by a canonical, immutable request object. Its digest must cover at least:
+
+- A unique request ID and nonce.
+- The exact stable `cluster_identity` and `role_oid`.
+- The requested action (exceptional tombstone removal), reason code and complete human-readable rationale.
+- The initiating operator's stable identity-provider subject.
+- Creation time, expiry time and the applicable policy/version identifier.
+- The relevant tombstone event ID(s) and registry sequence/version.
+- The target environment and deployment identity.
+
+The canonical serialization and digest algorithm must be fixed by the deployment security profile. Approval records must be cryptographically authenticated by the approved identity/signing mechanism and bind to the exact request digest; approvals for a different cluster, role, event, reason, environment, policy version or request digest are invalid.
+
+The two approvers must be independently authenticated human identities. Distinct usernames, accounts, email aliases or credentials alone are insufficient evidence of distinct people. The deployment must enforce distinct immutable workforce/identity-provider subject identifiers and an authoritative person-uniqueness control. Where the identity provider cannot establish distinct underlying people, exceptional removal is prohibited until an independently controlled identity-proofing process is approved.
+
+Each approval must include the approver's stable subject, authenticated assurance context, request digest, approval decision, timestamp, expiry, unique approval ID and cryptographic verification material/reference. Approvals must be time-limited, single-use and protected against replay. The executor must independently retrieve and verify both approvals, verify that the approvers are distinct from each other and the requester, verify authorisation and expiry, verify the exact request digest and current tombstone state, and verify that neither approval has previously been consumed. The executor must fail closed on any missing, invalid, revoked, expired, duplicated or unverifiable approval.
+
+The executor must not trust a caller-supplied assertion that approval has occurred. Approval verification and one-time consumption must be atomic with recording the execution attempt, using a strongly consistent authoritative approval ledger. If atomic consumption cannot be guaranteed, exceptional removal is disabled.
+
+Append immutable audit events for request creation, each approval attempt, rejection, expiry, replay detection, verification failure, execution attempt, success and failure. Audit records must retain request digest, stable actor subjects, decision, timestamps, policy version and correlation IDs, but must not expose secrets or signing material. Failed and rejected attempts are retained under the same tamper-resistant audit controls as successful actions.
+
+#### Retirement-intent fencing
+
+A durable retirement intent is an immediate security fence, not merely a workflow notification. From the point the authoritative registry commits the intent, no new protected work may begin for the retired `(cluster_identity, role_oid)`, even while database credential revocation, pool eviction, mapping reconciliation or session termination is pending.
+
+The authorization path must consult a strongly consistent retirement-fence authority before granting each new protected unit of work, or use an equivalent cryptographically verifiable fencing-token design that guarantees a stale positive mapping/cache cannot authorise work after the durable intent. A bounded positive mapping cache alone is not sufficient to meet the immediate-fence requirement.
+
+Requirements:
+
+- The retirement intent must atomically advance or create a monotonic fence generation for the composite identity key.
+- Every protected-work admission must validate the current active state and fence generation against an authoritative, strongly consistent source. Any cached permit must be bound to a fence generation and must not remain usable after a newer retirement generation commits.
+- The writer must not report durable intent until both the retirement event and the corresponding fence are committed and independently readable.
+- If the fence authority is unavailable, stale, inconsistent or cannot prove the current generation, new protected work is denied.
+- Existing sessions and already-admitted work are handled under the approved IC-03 Gate 0 cancellation/in-flight-write policy; no new work may enter while that handling proceeds.
+- Fence clearing or identity reactivation is prohibited through ordinary provisioning. Any exceptional recovery requires a separate reviewed, dual-controlled procedure and a new identity lifecycle event; a prior tombstone must never be silently erased.
+- The audit trail must correlate retirement intent, fence generation, rejected admissions, credential revocation, session actions, mapping reconciliation and completion.
+
+#### Additional acceptance tests
+
+- **C01-36:** mutate each security-relevant request field after approval; request digest mismatch prevents execution.
+- **C01-37:** submit approvals for another cluster, role OID, tombstone event, environment, reason or policy version; executor rejects each.
+- **C01-38:** replay an approval, reuse an approval ID, submit an expired/revoked approval or race two executions; exactly one valid consumption is possible.
+- **C01-39:** use two accounts/aliases mapped to the same underlying person; distinct-person control rejects the pair.
+- **C01-40:** use two independently authenticated, authorised human subjects; verify executor independently validates both signatures, identity uniqueness, expiry, request digest and one-time status.
+- **C01-41:** inject failures during approval verification and atomic consumption; no removal occurs and all attempts are immutably audited.
+- **C01-42:** crash immediately after durable retirement intent/fence commit and before database revoke; after restart, new protected work remains denied and reconciliation resumes by event ID.
+- **C01-43:** issue concurrent protected requests immediately before, during and after retirement-intent commit; no request admitted after the authoritative fence commit may begin protected work.
+- **C01-44:** retain a stale positive mapping cache or previously issued admission permit across retirement; fence-generation validation rejects it.
+- **C01-45:** make the fence authority unavailable, stale or inconsistent; new protected work fails closed.
+- **C01-46:** restore the registry from a validly signed but incomplete event sequence; integrity/sequence verification fails and protected work remains disabled.
+- **C01-47:** retry after database role revocation but before completion-event append; reconciliation is idempotent and cannot reactivate the identity.
+- **C01-48:** restore a cluster with changed or duplicated cluster identity; traffic remains disabled until independently authorised identity reconciliation completes.
+
+### IC-04-R4 — DNS freshness, connection lifetime and pooled-connection invalidation (Medium)
+
+#### DNS freshness and connection reuse policy
+
+Each deployment must publish explicit numeric DNS and connection-lifetime parameters in its endpoint-security profile. A resolver answer may be cached only until the earliest of its DNS TTL expiry and the deployment's configured maximum DNS cache age. The profile must define a finite maximum DNS cache age; an absent, zero/invalid or unbounded value is a configuration error and fails closed.
+
+Before opening a new connection after DNS cache expiry, the client must resolve again and repeat full A/AAAA/CNAME destination validation. DNS freshness is not extended by connection reuse. Every connection must have a finite maximum age, no greater than the deployment-approved maximum connection reuse lifetime. The implementation must enforce both idle timeout and absolute connection age; activity must not extend the absolute maximum age.
+
+Each pooled connection must be bound to a key containing at least the configured origin (scheme, hostname and port), selected peer IP, TLS server identity, trust/configuration version and destination-policy version. A connection is reusable only while all bindings remain current and approved.
+
+A destination-policy version change must synchronously invalidate affected pooled connections before any subsequent request is admitted. A DNS refresh that changes the validated address set, a newly prohibited peer, a trust-anchor/TLS policy change, redirect-policy change or proxy-policy change must invalidate affected connections and prevent further use of prohibited peers. Where immediate invalidation cannot be guaranteed, the fetch path must stop and fail closed rather than reuse uncertain connections.
+
+HTTP/2 connection coalescing across hostnames must be disabled for discovery/JWKS traffic unless a separately reviewed design proves that each coalesced origin independently satisfies DNS, peer, TLS, origin and policy binding. HTTP/2 multiplexed streams must not allow a request admitted under an older policy version to bypass a newer policy. The default implementation is one origin per connection, no cross-origin coalescing, and no reuse after policy-version change.
+
+For explicitly approved proxies, the deployment profile must identify the proxy product/version and require authenticated, tamper-resistant upstream-destination evidence. That evidence must identify the actual upstream peer IP, requested hostname, TLS identity where applicable, policy version and decision, and be independently retrievable for audit. A proxy's own address or an unverified assertion is not proof of upstream destination enforcement. If this evidence is unavailable or cannot be correlated to the fetch, the proxy path is not approved.
+
+The numeric DNS cache-age, maximum connection age, idle timeout, policy propagation/invalidation bound and any proxy evidence-retention values are deployment Gate 0/profile decisions; they must be explicitly set and approved before endpoint retrieval is enabled. The implementation must reject missing or out-of-range values rather than silently applying library defaults.
+
+#### Additional acceptance tests
+
+- **C04-37:** DNS answer TTL shorter/longer than configured maximum; effective cache age is the lesser bound and expired answers are not reused.
+- **C04-38:** DNS cache expires while requests are concurrent; each new connection uses a freshly validated address and cannot race a second resolution.
+- **C04-39:** policy version changes while HTTP/1.1 keep-alive and HTTP/2 connections are pooled; affected connections are invalidated before another request.
+- **C04-40:** an existing peer becomes prohibited; no new stream/request uses that connection, and active connections are closed or fetch service fails closed within the approved policy bound.
+- **C04-41:** attempt HTTP/2 connection coalescing across two hostnames with different DNS/policy outcomes; default client rejects coalescing.
+- **C04-42:** test HTTP/2 multiplexing during policy-version change; no request proceeds under stale policy.
+- **C04-43:** test maximum absolute connection age and idle timeout under continuous traffic; activity cannot extend the absolute lifetime.
+- **C04-44:** change A/AAAA answers and CNAME chains during concurrent validation/connection attempts; actual socket peer always matches a currently validated address or request fails closed.
+- **C04-45:** use proxy environment variables, operating-system proxy settings and application-level proxy configuration; none can bypass the configured proxy policy.
+- **C04-46:** approved proxy provides no verifiable upstream destination evidence, mismatched evidence or evidence for another request; fetch is rejected and audited.
+- **C04-47:** verify TLS rejects a certificate valid for a different hostname even when the socket connects to the correct validated IP.
+- **C04-48:** change DNS, TLS trust, destination policy and proxy policy independently; each relevant change invalidates all affected pooled connections before reuse.
+- **C04-49:** omit or misconfigure DNS cache age, maximum connection age or policy invalidation bound; endpoint retrieval remains disabled.
+- **C04-50:** run all DNS, socket, TLS, proxy and pool-reuse tests against the exact selected production HTTP client/version and transport configuration; mocks alone cannot pass the gate.
+
+### Gate 0 decision register — no silent defaults
+
+The following decisions remain explicitly OPEN and must be completed in a deployment-owner-approved, version-controlled profile before the dependent gates pass:
+
+| Decision group | Required approved values/evidence | Dependent gate |
+|---|---|---|
+| IC-03-R2 execution/revocation | Maximum transaction, query and job durations; new-work revocation propagation; query cancellation; session termination; positive membership-cache lifetime; in-flight write rollback/completion policy | Gates 1, 5 and 6 as applicable |
+| IC-05-R1 capacity/pooler | Tenant, BU, scope and concurrent-connection targets; per-scope pool min/max; global connection budget; provisioning/rotation throughput; exact PostgreSQL and pooler product/version/configuration/mode; measured `session_user` preservation | Gates 1 and 5 |
+| IC-06-R2 topology | Approved ADR selecting shared DB with scope-bound roles, separate DBs in one cluster, or separate clusters/instances; trust boundaries, operations, backup/restore, DR and cross-tenant controls | Gates 0, 1 and 6 |
+| IC-04-R4 endpoint freshness | Maximum DNS cache age, maximum absolute connection age, idle timeout, policy invalidation bound, selected HTTP client/version, HTTP/2/coalescing policy and any proxy evidence requirements | Gate 4 |
+| IC-01-R4 approval/fencing | Approved identity provider and stable human subject uniqueness source; signature/key custody and rotation; approval lifetime; replay ledger; strongly consistent fence authority and failure behaviour; named operational owners | Gate 1 |
+
+No numeric values in this table may be inferred from library defaults or selected by implementation engineers without deployment-owner approval. Engineering may implement configurable, fail-closed mechanisms and test harnesses before the deployment profile is final, but the affected release gates cannot pass until the actual profile is approved and tested.
+
+### Updated disposition
+
+| Finding | Severity | Contract disposition | Evidence still required |
+|---|---|---|---|
+| IC-01-R3 | Medium | Addressed at contract level | Implementation, crash recovery and registry evidence |
+| IC-01-R4 | Medium | Requirements and tests specified | Cryptographic approval, distinct-person enforcement and concurrent fencing tests |
+| IC-04-R3 | Medium | Addressed at contract level | Actual HTTP-client/socket evidence |
+| IC-04-R4 | Medium | DNS freshness, pooling and invalidation requirements specified | Exact client/version tests and approved numeric endpoint profile |
+| IC-03-R2 | High | OPEN — deployment-owner decision | Approved numerical execution/revocation profile |
+| IC-05-R1 | High | OPEN — deployment-owner decision | Approved capacity and exact pooler profile |
+| IC-06-R2 | Medium | OPEN — deployment-owner decision | Approved topology ADR |
+
+**Release boundary:** This section is a specification and test-plan change only. It does not claim the new controls are implemented or tested, does not close Gate 0, and does not authorise merge, deployment, production data, certification, live utility integration or SCADA/DMS operational activation.

@@ -107,7 +107,14 @@ Out of scope: SCADA/DMS commands, dispatch, switching, protection settings, live
 ## 6. C-04 — Exact OIDC access-token profile
 
 ### Implementation requirements
-- Document a provider-specific token profile for every supported IdP; do not assume claim formats are identical.
+- Build a provider-neutral OIDC integration contract. Do not hard-code Microsoft Entra ID, Google, Keycloak or any other vendor as the required identity provider.
+- Support any provider that conforms to the agreed OIDC/OAuth 2.0 security profile and publishes trusted discovery/JWKS metadata through an approved configuration path. Provider compatibility must be established by conformance tests, not by vendor name alone.
+- Keep provider-specific behavior in isolated adapters/configuration profiles: issuer and discovery URL, expected audience, claim mapping and types, token type, azp rules, scopes, JWKS refresh/rotation behavior and documented deviations. The core token validator and authorization policy must remain provider-independent.
+- Configure issuer, audience, client/resource identifiers, allowed algorithms, claim mappings and trust anchors per deployment through validated configuration/secrets. Never accept arbitrary issuer/JWKS URLs supplied by an end user or an untrusted token.
+- Do not weaken mandatory validation to accommodate a provider. A provider that cannot satisfy the security profile is not supported until an explicit, independently reviewed adaptation is designed.
+- If IBDEC selects a non-OIDC or non-conforming identity service (for example, a SAML-only service), use an approved federation/identity broker to present a conforming OIDC interface, or undertake a separate security design review. Do not silently treat SAML assertions as OIDC tokens.
+- IBDEC's eventual provider choice is a deployment configuration decision; it is not a prerequisite for building the provider-neutral adapter boundary and automated conformance harness.
+- Document a provider-specific token profile for every enabled deployment; do not assume claim formats are identical.
 - Accept access tokens only; reject ID tokens and tokens intended for another client/API.
 - Validate exact issuer, expected audience and documented audience-array semantics, signature, algorithm, key type/strength, subject, token type/typ, exp, iat and nbf.
 - Define provider-specific azp requirements and validate where applicable.
@@ -130,6 +137,11 @@ Out of scope: SCADA/DMS commands, dispatch, switching, protection settings, live
 | C04-10 | Unknown KID/JWKS unavailable | Bounded refresh then fail closed |
 | C04-11 | Emergency-revoked signing key | Token rejected |
 | C04-12 | Key rollover | Only configured trusted keys accepted |
+| C04-13 | Run common OIDC conformance suite against each candidate provider | Provider passes mandatory security profile before enablement |
+| C04-14 | Change provider configuration in staging | No core authorization/database redesign; old trust removed and new trust explicitly validated |
+| C04-15 | Provider emits unsupported claim format or token type | Adapter rejects until reviewed mapping/profile is approved |
+| C04-16 | Attempt to inject untrusted issuer/discovery/JWKS URL | Configuration rejected; no token-directed trust |
+| C04-17 | Candidate is SAML-only/non-conforming OIDC | Requires approved federation broker or separate security design; no direct acceptance |
 
 ## 7. C-05 — Enterprise roles, credentials and pool scalability
 
@@ -206,7 +218,7 @@ Seed at least two tenants and two BUs per tenant with uniquely identifiable rows
 | 1 | Role OID mapping and atomic provisioning | C-01 tests pass |
 | 2 | Protected scope lookup function | C-02 tests pass |
 | 3 | RLS policies and composite constraints | Read/write adversarial tests pass |
-| 4 | OIDC/JWKS and membership | C-04 and revocation tests pass |
+| 4 | Provider-neutral OIDC adapter, provider conformance profiles/JWKS and membership | Core conformance suite passes; IBDEC's selected provider profile is separately validated before that deployment is enabled |
 | 5 | Pool lifecycle and revocation | C-03/C-05 pass; no cross-scope reuse |
 | 6 | Background-job identity | Signature, audience, expiry, replay and membership tests pass |
 | 7 | Full PostgreSQL evidence | C-07 complete against actual supported topology |
@@ -224,11 +236,11 @@ This contract does not authorise merging PR #3, production deployment, live util
 ## 12. Gate 0 decisions required
 
 The engineering owner must record:
-1. First supported OIDC provider(s) and exact access-token claim profile for each.
+1. **Provider choice is deferred:** implement the vendor-neutral OIDC adapter and common conformance suite now. When IBDEC confirms its identity provider, validate and approve that provider's exact access-token profile before enabling it in the IBDEC deployment. If the chosen service is not OIDC-conforming, decide on a federation broker or a separately reviewed design.
 2. Initial maximum tenant count, BUs per tenant, active scopes and concurrent protected connections.
 3. PostgreSQL version(s), pooler product/version and pooling mode to be tested.
 4. Maximum transaction, query and background-job duration; in-flight revocation policy.
 5. Initial topology: shared DB with scope-bound roles or separate DB per tenant.
 6. Owners and runbooks for provisioning, credential rotation, emergency revocation and disaster recovery.
 
-No implementation shortcut may weaken Section 2 invariants to avoid these decisions.
+No implementation shortcut may weaken Section 2 invariants to avoid these decisions. Provider selection is not a blocker for the provider-neutral adapter design; it is a mandatory enablement decision before connecting IBDEC's live identity service.

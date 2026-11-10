@@ -244,3 +244,140 @@ The engineering owner must record:
 6. Owners and runbooks for provisioning, credential rotation, emergency revocation and disaster recovery.
 
 No implementation shortcut may weaken Section 2 invariants to avoid these decisions. Provider selection is not a blocker for the provider-neutral adapter design; it is a mandatory enablement decision before connecting IBDEC's live identity service.
+
+
+## 13. Independent implementation-contract review conditions (IC-01–IC-07)
+
+**Review decision on baseline:** APPROVED WITH CONDITIONS  
+**Exact reviewed baseline:** `b63a341695960c93ae1f80479a9c9eaa2eaed312`  
+**Disposition:** The following conditions are mandatory additions to the relevant gate exit criteria. They do not constitute implementation evidence or production approval.
+
+### IC-01 — Authenticated role identity, OID resolution and lifecycle safety (High)
+
+The implementation must document and test the exact PostgreSQL mechanism used to resolve the authenticated `session_user` to the role OID used by the protected mapping. Do not claim that `session_user` itself exposes an OID: it exposes a role identity/name. The implementation must explicitly analyse the name-to-catalog-OID resolution step and its behavior across role deletion, recreation and stale sessions.
+
+Mandatory requirements:
+
+1. Resolve the authenticated `session_user` only through a trusted, schema-qualified PostgreSQL catalog lookup; never accept a role name or OID from the caller, request, JWT, SQL argument or GUC.
+2. Treat a missing, ambiguous, disabled or inconsistent role resolution as no scope and fail closed.
+3. Establish a permanent non-reuse policy for login role names (including a tombstone/retired-name registry controlled by provisioning), so an old authenticated session cannot resolve by name to a newly created role with the same name.
+4. Deprovision in this order: mark mapping inactive and commit; reject new work; revoke/rotate credentials; terminate all sessions for that login; evict its pools; verify zero remaining sessions; remove/retire mapping and role; permanently reserve the retired role name. The exact order must be transactionally and operationally safe for the chosen deployment.
+5. Provisioning must reject a retired role name. A recreated role must receive a new, never-before-used login name and OID, with no inherited mapping or privileges.
+6. Document catalog permissions and ensure the lookup can read the required role identity/OID without granting runtime roles catalog access beyond what is necessary.
+7. Include failure recovery for interruption at every deprovisioning step. A partially deprovisioned role remains inactive and unusable until reconciled.
+
+If the chosen PostgreSQL version/architecture cannot prove safe authenticated-identity-to-OID resolution and stale-session invalidation, stop and obtain a separately reviewed identity-binding design; do not substitute a writable GUC or caller-provided role identifier.
+
+Additional mandatory tests:
+- C01-11: verify the lookup derives identity from `session_user` and resolves the current catalog OID through the documented trusted mechanism.
+- C01-12: old session plus drop/recreate attempt under the same role name; name reuse is prohibited, and no old session can resolve to a new scope.
+- C01-13: interrupt deprovisioning after each step; role remains inactive, cannot perform protected work, and recovery completes safely.
+- C01-14: verify retired-name tombstones survive backup/restore and provisioning recovery.
+- C01-15: missing catalog role resolution returns no scope and fails closed.
+
+### IC-02 — Effective SECURITY DEFINER privilege proof (High)
+
+Add a machine-verifiable privilege inventory to the migration/test evidence. It must inspect effective privileges and role memberships, not merely declared role attributes.
+
+Prove that the dedicated function owner:
+- Has only the mapping-table `SELECT` privilege required by the lookup, plus unavoidable minimum schema/function privileges.
+- Cannot INSERT, UPDATE, DELETE or TRUNCATE the mapping; create/alter/drop roles; alter memberships; modify application tables; run migrations; or assume privileged roles.
+- Has no direct or inherited membership that grants provisioning, migration, ownership, superuser or bypass-RLS capability.
+- Does not own the mapping table or protected application tables.
+- Can read the intended mapping under the actual mapping-table ownership and RLS configuration, without a hidden policy bypass or accidental denial.
+
+Also prove PUBLIC and all unintended roles lack function EXECUTE. Test hostile caller `search_path`, `pg_temp` shadowing, trusted-schema CREATE restrictions and effective privilege escalation attempts. Capture the SQL output of privilege/catalog inspection in the retained evidence.
+
+### IC-03 — Numeric revocation and execution limits (High)
+
+Gate 0 must record numeric, enforceable values before revocation/long-running-work implementation is declared complete:
+
+| Parameter | Required Gate 0 value |
+|---|---|
+| Maximum protected transaction duration | Explicit duration |
+| Maximum protected query duration | Explicit duration |
+| Maximum background-job duration | Explicit duration |
+| Maximum revocation propagation for new work | Explicit duration |
+| Maximum query cancellation time after revocation | Explicit duration |
+| Maximum affected-session termination time | Explicit duration |
+| Maximum membership positive-cache lifetime | At most 30 seconds unless a stricter value is selected |
+| In-flight write policy | Roll back/cancel, or bounded completion with explicit justification and limit |
+
+Acceptance tests must consume these approved values from deployment configuration and assert actual elapsed behavior; they must not invent test-local timeout values. The policy must state exactly what happens to a write already in progress at revocation. No indefinite continuation is permitted. Retain timestamps and transaction/persisted-state evidence proving the selected behavior.
+
+### IC-04 — JWT access tokens versus opaque OAuth tokens (Medium)
+
+The current OIDC/JWKS validation path supports signed JWT access tokens only. Explicitly reject opaque OAuth access tokens on this path; do not attempt to parse them as JWTs or silently accept them.
+
+If IBDEC or another customer requires opaque tokens, introduce a separately reviewed introspection-based validation profile. That profile must specify authenticated introspection transport, endpoint trust and TLS/redirect policy, client authentication, response validation, caching limits, availability behavior, revocation freshness, outage fail-closed behavior and adversarial tests. It must not weaken the signed-JWT path.
+
+Add provider conformance tests for:
+- Discovery document issuer exactly matching the configured trusted issuer.
+- JWKS endpoint TLS validation and redirect policy (reject unapproved cross-origin redirects).
+- Trusted binding between configured issuer, discovery metadata and JWKS endpoint.
+- Unknown-KID refresh rate limiting and bounded negative caching to prevent refresh amplification.
+- Emergency signing-key revocation and cache invalidation.
+- Provider-specific audience, audience-array, `typ`, `azp` and access-token representation differences.
+
+“Provider-neutral” means multiple independently tested adapters conform to one common security contract; it does not mean all providers are assumed to behave identically.
+
+### IC-05 — Numeric capacity profile and actual pooler proof (High)
+
+Before Gate 5 is accepted, Gate 0 must record numerical targets for:
+- Maximum tenants.
+- Maximum BUs per tenant.
+- Maximum active database scopes.
+- Maximum concurrent protected connections/transactions.
+- Per-scope pool minimum/maximum and global pool maximum.
+- Maximum role/credential count.
+- Provisioning and credential-rotation throughput.
+- Pooler product, exact version, configuration and pooling mode.
+
+Run integration tests against the exact selected pooler version and mode. Prove that `session_user` remains associated with the intended authenticated scope during connection checkout, transaction completion, reuse, cancellation, credential rotation and pool eviction. Transaction pooling is not presumed compatible. If the selected pooler cannot preserve the required database-authenticated identity semantics, reject that configuration or choose a separately reviewed architecture; never fall back to shared login plus writable GUC.
+
+### IC-06 — Approved topology decision record (Medium)
+
+Before production topology selection, create and approve a version-controlled architecture decision record that:
+- Selects shared database with scope-bound login roles/RLS or separate database per tenant.
+- Records the rejected alternative and rationale.
+- Defines tenant/BU threat assumptions, trust boundaries, credentials and network boundaries.
+- Covers migration/rollback, backup/restore, disaster recovery, monitoring, connection limits, cross-tenant analytics, operational ownership and cost.
+- States which BU controls remain within a tenant database if separate databases are chosen.
+- Includes recovery and adversarial-test evidence for the selected topology.
+
+A separate schema in a shared database must not be represented as an independent authenticated database boundary.
+
+### IC-07 — Reproducible PostgreSQL security evidence (Medium)
+
+Every completed security gate must retain a reproducible evidence bundle containing:
+1. Exact source commit, PR, workflow run ID and job ID.
+2. PostgreSQL version, build and relevant server configuration.
+3. Exact migration IDs/checksums and schema version.
+4. Database role, membership and effective privilege inventory.
+5. SECURITY DEFINER function owner, definition, search_path and EXECUTE grants.
+6. Mapping-table owner, privileges and RLS configuration.
+7. RLS policy inventory for every protected table, including enabled/forced status and command coverage.
+8. Executed adversarial SQL/scripts and complete test output.
+9. Before-and-after persisted-row assertions for each attack.
+10. Pooler product/version/mode and connection-reuse test evidence where applicable.
+
+The lookup must explicitly use authenticated `session_user` identity, not `current_user` inside SECURITY DEFINER execution (where current_user is the function owner). Add a test that records both values inside the function and proves the authenticated session identity is the source of scope resolution. CI must fail if required PostgreSQL adversarial suites or evidence artifacts are skipped or absent. SQLite, mocks and HTTP-only assertions remain insufficient.
+
+## 14. Revised gate exit criteria
+
+These additions refine, rather than replace, the existing ordered gates:
+
+| Gate | Additional mandatory exit condition |
+|---|---|
+| Gate 0 | Numeric transaction/query/job/revocation limits; numerical capacity profile; actual PostgreSQL/pooler target; topology ADR; provider support boundary (JWT access tokens only on the JWKS path) |
+| Gate 1 | IC-01 authenticated identity-to-OID mechanism, permanent role-name non-reuse, stale-session invalidation and interrupted-deprovisioning tests pass |
+| Gate 2 | IC-02 effective SECURITY DEFINER owner privilege inventory and hostile search_path/pg_temp tests pass |
+| Gate 3 | RLS evidence bundle includes exact policy inventory and persisted-state assertions |
+| Gate 4 | IC-04 JWT-only boundary, discovery/JWKS TLS and issuer binding, redirect controls, unknown-KID rate limiting and emergency revocation tests pass |
+| Gate 5 | IC-03 approved numeric revocation/execution limits enforced; IC-05 exact pooler configuration and declared capacity tests pass |
+| Gate 6 | Job-duration and in-flight revocation behavior use the approved Gate 0 limits |
+| Gate 7 | IC-07 reproducible evidence bundle complete; CI blocks missing/skipped adversarial evidence |
+| Gate 8 | Independent reviewer assesses exact implementation SHA and all IC-01–IC-07 evidence; critical/high findings closed |
+| Gate 9 | Separate explicit release authorization; no automatic deployment or operational activation |
+
+**No gate is passed by documentation alone.** Each gate requires its implementation, test execution and retained evidence. Where a Gate 0 value or architecture choice is not yet known, record it as OPEN; do not invent a value or mark the affected gate complete.

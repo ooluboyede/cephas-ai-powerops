@@ -381,3 +381,68 @@ These additions refine, rather than replace, the existing ordered gates:
 | Gate 9 | Separate explicit release authorization; no automatic deployment or operational activation |
 
 **No gate is passed by documentation alone.** Each gate requires its implementation, test execution and retained evidence. Where a Gate 0 value or architecture choice is not yet known, record it as OPEN; do not invent a value or mark the affected gate complete.
+
+## 15. Independent review remediation — PR #5 reassessment
+
+**Review decision:** APPROVED WITH CONDITIONS  
+**Exact reviewed commit:** `9abab6afb04007a60b4816345a3bd5d2b207a6ad`  
+**Review scope:** this documentation-only implementation contract and CI run #69.  
+**Boundary:** these clarifications do not constitute implementation evidence, gate completion or production approval.
+
+### IC-01-R1 — Retired OID and restore/reconciliation semantics (Medium)
+
+Role-name tombstones remain mandatory, and the implementation must additionally maintain an auditable retired-identity record for every deprovisioned role OID. A retired OID must never be reactivated or rebound to a scope, even if PostgreSQL later assigns that numeric OID to a newly created role.
+
+Provisioning must compare the newly assigned catalog OID against the retired-identity registry before creating an active scope mapping. If the OID is present in the retired registry, provisioning must fail closed and must not activate the role or create a scope mapping. The implementation team must demonstrate a safe, operationally supported way to recover from that collision; it must not silently delete or overwrite the tombstone.
+
+Backup/restore and point-in-time recovery procedures must preserve and reconcile both retired role-name and retired-OID records before accepting protected traffic. If restored catalog state and the tombstone registry are inconsistent, protected identity resolution remains disabled until reconciliation is complete.
+
+Additional acceptance tests:
+- C01-16: deprovision a role and verify both its name and OID are retained in immutable/audited retired-identity records.
+- C01-17: simulate a newly created role receiving an OID present in the retired registry; provisioning refuses activation and no scope mapping is created.
+- C01-18: restore a backup with catalog/mapping/tombstone state deliberately inconsistent; protected work remains disabled until reconciliation, and no retired identity is rebound.
+- C01-19: verify tombstones are not removed by ordinary provisioning, cleanup, migration or restore operations; removal requires a separately approved security procedure.
+
+### IC-03-R1 — Gate 0 execution and revocation limits (High)
+
+The values in Section 13 remain OPEN until approved by the engineering owner for the actual deployment profile. Before implementing or declaring Gate 5 or Gate 6 complete, record numeric maximums for transaction duration, query duration, job duration, new-work revocation propagation, query cancellation, session termination and membership positive-cache lifetime. Record the in-flight write policy and its maximum completion/rollback bound.
+
+No defaults are to be presented as approved deployment limits. The 30-second positive-cache value remains a maximum unless a stricter value is selected; the actual approved value must be explicit. Tests must read the approved profile and measure elapsed behavior and persisted database state.
+
+### IC-04-R1 — Discovery and JWKS endpoint transport (Medium)
+
+Both the OIDC discovery-document endpoint and the JWKS endpoint must use validated HTTPS/TLS. Certificate validation is mandatory. Redirects must be disabled by default; if a deployment requires redirects, only explicitly approved same-origin redirects may be followed under a documented policy. Unapproved cross-origin redirects must be rejected.
+
+The configured issuer, discovery document issuer and JWKS trust binding must be consistent. A discovery document must not be allowed to redirect trust to an unapproved JWKS host.
+
+Additional acceptance tests:
+- C04-18: invalid/expired TLS certificate at discovery endpoint — fail closed.
+- C04-19: invalid/expired TLS certificate at JWKS endpoint — fail closed.
+- C04-20: unapproved cross-origin redirect from discovery or JWKS — rejected.
+- C04-21: discovery issuer mismatch or discovery metadata pointing to an untrusted JWKS endpoint — rejected.
+- C04-22: approved same-origin redirect behavior, if enabled, matches the documented allowlist and cannot change trust origin.
+
+### IC-05 — Gate 0 dependency reminder (High)
+
+The numerical capacity profile and exact pooler product/version/configuration/mode remain OPEN deployment decisions. Gate 5 cannot pass until these are selected, recorded and tested against the actual pooler. A generic unit test or a test against a different pooler/version/mode is not sufficient evidence.
+
+### IC-06-R1 — Define the separate-database boundary (Medium)
+
+The topology ADR must distinguish these materially different options:
+
+1. **Separate databases in one PostgreSQL cluster:** PostgreSQL roles are cluster-wide, not database-local. The ADR must define distinct tenant login roles/credentials, CONNECT and object privileges, network/application routing, administrative trust boundary, and demonstrate that one tenant's credentials cannot authenticate into or obtain scope in another tenant database.
+2. **Separate PostgreSQL clusters/instances:** define independent authentication and administrative boundaries, credential ownership, network segmentation, patching, monitoring, backup/restore and disaster recovery responsibilities.
+
+The ADR must state which option is selected and must not describe separate databases in one cluster as independent role namespaces or as equivalent to separate cluster administration. Acceptance tests must attempt cross-tenant authentication and access using each tenant's credentials and verify denial at the actual selected boundary.
+
+### Consolidated disposition
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| IC-01-R1 | Medium | Clarification and tests added; implementation evidence remains required |
+| IC-03-R1 | High | Gate 0 numeric decisions remain OPEN |
+| IC-04-R1 | Medium | Discovery/JWKS transport requirements and tests added |
+| IC-05 | High | Gate 0 capacity and exact pooler selection remain OPEN |
+| IC-06-R1 | Medium | Same-cluster versus separate-cluster distinction added |
+
+The contract remains a plan for controlled implementation. Gate 0 decisions must be supplied by the deployment owner; values must not be invented. No implementation gate passes by documentation alone.

@@ -1,0 +1,180 @@
+# CEPHAS AI PowerOps 0.1.1 — customer deployment profile
+# TEMPLATE ONLY. Do not deploy with this file.
+# Every null / UNAPPROVED value is a release blocker for dependent gates.
+# Values must be supplied by the named deployment owner and approved in version control.
+
+profile:
+  id: "UNAPPROVED"
+  version: "0.1.1"
+  customer_deployment_id: null
+  customer_name_or_code: null
+  environment: null # staging | production
+  status: "UNAPPROVED"
+  approved_at_utc: null
+  approval_record_uri: null
+
+architecture:
+  commercial_model: "one_customer_controlled_deployment_per_utility_customer"
+  commercial_model_status: "RECOMMENDED_NOT_APPROVED"
+  cross_customer_shared_runtime: false
+  cross_customer_shared_runtime_status: "PROHIBITED_FOR_INITIAL_REFERENCE_MODEL"
+  postgres_topology: "dedicated_cluster_or_independently_administered_instance_per_customer"
+  postgres_topology_status: "RECOMMENDED_NOT_APPROVED"
+  postgres_version: null
+  database_names_and_boundaries: []
+  tenant_and_business_unit_isolation: "scope_bound_database_identity_plus_rls"
+  separate_staging_and_production: true
+  staging_production_separation_evidence: null
+  adr_id: "ADR-PWR-001"
+  adr_approval_status: "UNAPPROVED"
+  adr_approval_record: null
+
+capacity:
+  tenant_count: null
+  business_units_per_tenant_max: null
+  tenant_wide_scopes_count: null
+  active_scopes_max: null
+  concurrent_users_peak: null
+  concurrent_api_requests_peak: null
+  concurrent_protected_transactions_peak: null
+  concurrent_jobs_peak: null
+  database_connection_limit: null
+  administrative_connection_reserve: null
+  per_scope_pool_min: null
+  per_scope_pool_max: null
+  global_pool_connection_budget: null
+  provisioning_events_per_hour_peak: null
+  credential_rotations_per_day_peak: null
+  audit_events_per_second_peak: null
+  expected_database_size_gb: null
+  annual_growth_percent: null
+  load_test_profile_uri: null
+  load_test_result_uri: null
+  capacity_owner: null
+  capacity_approval_record: null
+
+ic_03_execution_and_revocation:
+  max_transaction_duration_seconds: null
+  max_query_duration_seconds: null
+  max_job_duration_seconds: null
+  max_positive_membership_cache_seconds: null
+  max_new_work_revocation_propagation_seconds: null
+  max_query_cancellation_seconds: null
+  max_session_termination_seconds: null
+  max_job_cancellation_seconds: null
+  in_flight_write_policy: null # rollback | bounded_completion
+  in_flight_write_max_completion_seconds: null
+  authority_outage_policy: "fail_closed"
+  owner_customer_security: null
+  owner_powerops_service: null
+  approval_record: null
+  runtime_test_evidence_uri: null
+
+ic_05_database_and_pooler:
+  postgres_product: "PostgreSQL"
+  postgres_version: null
+  pooler_product: null
+  pooler_version: null
+  pooler_mode: null
+  pooler_configuration_uri: null
+  session_user_preservation_required: true
+  session_user_conformance_evidence_uri: null
+  pool_exhaustion_policy: "bounded_backpressure_fail_closed_no_shared_login_fallback"
+  credential_rotation_test_evidence_uri: null
+  owner_customer_dba: null
+  owner_powerops_engineering: null
+  approval_record: null
+
+ic_06_topology:
+  selected_option: null # shared_db_rls | separate_databases_one_cluster | separate_clusters_or_instances
+  selected_option_status: "UNAPPROVED"
+  threat_model_uri: null
+  rejected_alternatives_and_rationale_uri: null
+  migration_and_rollback_evidence_uri: null
+  backup_policy_uri: null
+  backup_custodian: null
+  restore_test_evidence_uri: null
+  disaster_recovery_plan_uri: null
+  rto_minutes: null
+  rpo_minutes: null
+  failover_test_evidence_uri: null
+  cross_tenant_analytics_design_uri: null
+  owner_customer_architecture_security: null
+  approval_record: null
+
+ic_04_endpoint_security:
+  http_client_product: null
+  http_client_version: null
+  dns_max_cache_age_seconds: null
+  connection_max_absolute_age_seconds: null
+  connection_idle_timeout_seconds: null
+  policy_invalidation_max_seconds: null
+  http2_enabled: null
+  http2_cross_origin_coalescing: false
+  proxy_mode: "disabled" # disabled | explicitly_approved
+  proxy_product: null
+  proxy_version: null
+  proxy_upstream_evidence_format: null
+  proxy_evidence_retention_days: null
+  allowed_issuer_hosts: []
+  prohibited_destination_policy_uri: null
+  actual_socket_peer_test_evidence_uri: null
+  tls_identity_test_evidence_uri: null
+  dns_rebinding_test_evidence_uri: null
+  pool_invalidation_test_evidence_uri: null
+  owner_customer_network_security: null
+  approval_record: null
+
+ic_01_identity_approval_and_fencing:
+  oidc_provider: null
+  oidc_issuer: null
+  oidc_audience: null
+  oidc_profile_uri: null
+  human_identity_uniqueness_source: null
+  distinct_person_verification_method: null
+  approval_signature_algorithm: null
+  signing_key_custodian: null
+  signing_key_rotation_policy_uri: null
+  signing_key_revocation_procedure_uri: null
+  exceptional_approval_max_age_seconds: null
+  approval_replay_ledger_product: null
+  approval_ledger_consistency_model: null
+  retirement_fence_authority: null
+  retirement_fence_consistency_model: null
+  fence_authority_outage_policy: "deny_new_protected_work"
+  tombstone_writer_workload_identity: null
+  tombstone_reconciler_workload_identity: null
+  exceptional_removal_executor_identity: null
+  exceptional_removal_two_person_control: true
+  independent_tombstone_backup_uri: null
+  tombstone_restore_test_evidence_uri: null
+  owner_customer_iam_security: null
+  owner_customer_operations: null
+  approval_record: null
+
+operations:
+  powerops_mode: "advisory_only"
+  scada_dms_connectivity: false
+  dispatch_switching_protection_controls: false
+  production_data_authorised: false
+  production_deployment_authorised: false
+  customer_network_integration_authorised: false
+  incident_response_runbook_uri: null
+  emergency_access_policy_uri: null
+  audit_retention_days: null
+  audit_integrity_verification_evidence_uri: null
+  customer_security_contact: null
+  powerops_security_contact: null
+  independent_security_review_uri: null
+  qualified_power_systems_review_uri: null
+
+release_gates:
+  gate_0_owner_decisions_approved: false
+  gate_1_identity_and_database_isolation: "BLOCKED"
+  gate_2_revocation_and_long_running_work: "BLOCKED"
+  gate_3_topology_and_capacity: "BLOCKED"
+  gate_4_jwks_endpoint_security: "BLOCKED"
+  gate_5_pooler_and_runtime_conformance: "BLOCKED"
+  gate_6_recovery_and_operational_evidence: "BLOCKED"
+  independent_implementation_review: "NOT_STARTED"
+  release_authorisation: false

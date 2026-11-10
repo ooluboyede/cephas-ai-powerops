@@ -446,3 +446,87 @@ The ADR must state which option is selected and must not describe separate datab
 | IC-06-R1 | Medium | Same-cluster versus separate-cluster distinction added |
 
 The contract remains a plan for controlled implementation. Gate 0 decisions must be supplied by the deployment owner; values must not be invented. No implementation gate passes by documentation alone.
+
+
+## 16. Independent security re-review remediation — IC-01-R2 and remaining Gate 0 conditions
+
+**Review decision:** APPROVED WITH CONDITIONS  
+**Exact reviewed commit:** `0a58835a5a21b45fb597a169dd7671a0ebaa73fb`  
+**Review scope:** Sections 2–15 and CI run #70.  
+**Boundary:** This section is a documentation and acceptance-test refinement only. It is not implementation evidence or production approval.
+
+### IC-01-R2 — Cluster-scoped role OID identity and independent tombstone durability (Medium)
+
+PostgreSQL role OIDs are scoped to a PostgreSQL cluster and are not globally unique. Every retired role identity record must therefore use a stable cluster identity together with the role OID as its identity key:
+
+`(cluster_identity, role_oid)`
+
+The cluster identity must be stable across ordinary restart, backup and restore, and must not be inferred solely from a mutable hostname, IP address or display name. The deployment architecture must define how a newly provisioned cluster receives a distinct identity and how clone/restore procedures prevent accidental identity duplication.
+
+The authoritative retired-identity registry must survive point-in-time restoration of the PostgreSQL cluster to a point before a role was deprovisioned. Keeping the only tombstone copy inside the database being restored is insufficient unless an independently recoverable mechanism proves that no retired record can be lost.
+
+Requirements:
+- Maintain an auditable retired-identity key containing stable cluster identity and role OID.
+- Store or replicate authoritative tombstones in an independently recoverable system, or document and prove an equivalent mechanism with the same rollback-resistance guarantee.
+- Restrict append, reconciliation and exceptional removal privileges to explicitly named security/provisioning authorities; ordinary runtime, provisioning, migration and restore identities cannot alter or delete retired records.
+- Reconcile authoritative tombstones against the restored PostgreSQL catalog and role mappings before enabling protected traffic.
+- If registry availability, integrity, cluster identity or reconciliation is uncertain, disable protected identity resolution and fail closed.
+- Exceptional tombstone removal, if ever permitted, requires a separately approved, dual-controlled security procedure and immutable audit evidence.
+
+Additional acceptance tests:
+- C01-20: deprovision a role in cluster A and verify its retirement key includes cluster A's stable identity and role OID.
+- C01-21: create/inspect cluster B with the same numeric role OID and prove it is not confused with cluster A's retired identity.
+- C01-22: restore cluster A from a point-in-time backup predating deprovisioning while retaining the authoritative tombstone; protected resolution remains disabled until reconciliation completes.
+- C01-23: attempt tombstone modification/deletion using runtime, provisioning, migration and restore identities; all unauthorised operations fail and are audited.
+- C01-24: verify cluster identity remains stable across supported restore/recovery and is distinct for a separately provisioned cluster; cloned environments cannot accept protected traffic until identity is explicitly reconciled.
+- C01-25: simulate unavailable, stale or inconsistent authoritative tombstone storage; all protected identity resolution fails closed.
+
+### IC-04-R2 — Discovery/JWKS endpoint resolution restrictions (Low)
+
+In addition to the HTTPS/TLS and redirect requirements in Section 15, endpoint resolution must be constrained by the deployment's approved network policy.
+
+Requirements:
+- Bind discovery and JWKS retrieval to explicitly approved hostnames and trust origins.
+- Resolve and validate destination addresses at connection time; reject prohibited loopback, link-local, private, metadata-service or otherwise disallowed destinations unless a specific destination is explicitly approved for that deployment.
+- Revalidate destination policy after DNS changes and redirects; do not allow DNS rebinding or redirect behavior to bypass the approved destination policy.
+- Apply equivalent controls to IPv4 and IPv6 and to every resolved address used by the HTTP client.
+- Do not disable certificate validation or destination checks to make a provider work; unsupported provider/network configurations require an explicit reviewed exception or alternative integration design.
+
+Additional acceptance tests:
+- C04-23: discovery hostname resolves to a prohibited loopback, link-local, private or metadata-service address; request rejected before metadata is trusted.
+- C04-24: JWKS hostname resolves to a prohibited destination; signing keys are not fetched or trusted.
+- C04-25: DNS answer changes from an approved to a prohibited address between refreshes; subsequent retrieval is rejected.
+- C04-26: redirect to an unapproved hostname or prohibited destination; request rejected.
+- C04-27: IPv4 and IPv6 resolution policy is consistently enforced.
+
+### Gate 0 — decisions that remain OPEN
+
+The reviewer confirmed that the contract requirements are substantially satisfied, but the following are deployment-owner decisions and must not be invented by the engineering team. Gate 0 remains OPEN until an approved, version-controlled deployment profile and topology ADR record them:
+
+1. Initial maximum tenant count.
+2. Maximum business units per tenant.
+3. Maximum active database scopes.
+4. Maximum concurrent protected connections/transactions.
+5. Per-scope pool minimum/maximum and global connection budget.
+6. Exact PostgreSQL version and deployment topology: shared database with scope-bound login roles, separate databases within one cluster, or separate PostgreSQL clusters/instances.
+7. Exact pooler product, version, configuration and pooling mode.
+8. Maximum protected transaction duration, query duration and background-job duration.
+9. Maximum new-work revocation propagation, query-cancellation time and affected-session termination time.
+10. Maximum positive membership-cache lifetime (no more than 30 seconds unless a stricter value is selected).
+11. Explicit in-flight write policy: rollback/cancel or bounded completion with approved maximum duration and justification.
+12. Provider support boundary: provider-neutral OIDC adapter and common conformance suite may be developed; the selected deployment provider profile must pass conformance before enablement. The JWKS validation path accepts signed JWT access tokens only unless a separately reviewed opaque-token introspection profile is approved.
+13. Named operational ownership for provisioning, deprovisioning, tombstone registry durability/reconciliation, credential rotation, emergency revocation, backup/restore and disaster recovery.
+
+Gate 1 role-mapping implementation must not pass without the cluster identity and independent tombstone durability design. Gate 4 endpoint retrieval implementation must not pass without the endpoint-resolution policy. Gate 5 and Gate 6 must not pass without the approved numerical execution/revocation profile and exact capacity/pooler profile. No gate passes by documentation alone; implementation and reproducible evidence remain mandatory.
+
+### Updated consolidated disposition
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| IC-01-R2 | Medium | Cluster-scoped OID identity and independently recoverable tombstones specified; implementation proof required at Gate 1 |
+| IC-03-R2 | High | Numerical execution/revocation values remain OPEN at Gate 0 |
+| IC-04-R2 | Low | Endpoint-resolution and DNS/redirect restrictions specified; implementation tests required at Gate 4 |
+| IC-05-R1 | High | Numerical capacity and exact pooler remain OPEN at Gate 0/Gate 5 |
+| IC-06-R2 | Medium | Actual topology ADR remains OPEN at Gate 0 |
+
+This revision does not select deployment values or topology on behalf of the deployment owner. It does not authorise merge, production deployment, customer-data processing, certification, live utility integration or SCADA/DMS operational activation.

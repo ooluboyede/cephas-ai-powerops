@@ -751,3 +751,99 @@ No numeric values in this table may be inferred from library defaults or selecte
 | IC-06-R2 | Medium | OPEN — deployment-owner decision | Approved topology ADR |
 
 **Release boundary:** This section is a specification and test-plan change only. It does not claim the new controls are implemented or tested, does not close Gate 0, and does not authorise merge, deployment, production data, certification, live utility integration or SCADA/DMS operational activation.
+
+
+## 19. Initial deployment architecture recommendation and Gate 0 profile
+
+**Status:** proposed reference architecture; deployment-owner approval required  
+**Purpose:** establish one consistent initial deployment model without inventing customer capacity, operational limits, identity-provider details or service-level objectives.
+
+### 19.1 Initial deployment model
+
+The recommended initial commercial and security model is **one customer-controlled PowerOps deployment per utility customer**. The initial release is not a shared multi-customer SaaS runtime.
+
+For the high-assurance reference topology, the recommended default is:
+
+- One dedicated customer-controlled production deployment per utility customer.
+- A separate PostgreSQL cluster or independently administered PostgreSQL instance for that customer, rather than multiple customers sharing one PostgreSQL cluster.
+- Separate staging/test and production environments, credentials, signing keys, trust configuration, audit stores and network policy.
+- Customer-controlled network boundaries, backup custody, recovery operations and access approval.
+- Within each customer deployment, preserve mandatory tenant and business-unit isolation. Use a distinct authenticated database scope for every tenant/BU scope; do not infer tenant-wide access from absent BU context.
+- Do not use a shared cross-customer runtime database login, shared writable scope variable, or schema-only separation as a substitute for the authenticated database boundary.
+- Customer-specific identity provider, OIDC issuer/audience profile, key custody, endpoint allowlist and approved egress path.
+- PowerOps remains advisory-only. No dispatch, switching, protection-setting, SCADA/DMS command or other operational control path is in scope.
+
+**Rationale:** this topology aligns with customer-controlled deployment and data custody, reduces cross-customer blast radius, and makes backup/restore, incident response and customer-specific identity/egress policy independently governable. It has higher infrastructure and operational cost than a shared cluster; that cost must be assessed against the actual customer deployment.
+
+**Important:** this is an engineering recommendation, not a completed IC-06 decision. The deployment owner must approve or reject it in a signed/version-controlled ADR. If rejected, the ADR must compare all three alternatives in Section 8 and document residual risks and compensating controls.
+
+### 19.2 Topology decision record (ADR-PWR-001)
+
+| Field | Proposed decision / required evidence | Status |
+|---|---|---|
+| Commercial deployment boundary | One customer-controlled deployment per utility customer | Recommended; owner approval pending |
+| Initial customer tenancy | No cross-customer shared runtime | Recommended; owner approval pending |
+| PostgreSQL boundary | Dedicated cluster or independently administered instance per customer | Recommended; owner approval pending |
+| Tenant/BU isolation inside customer boundary | Authenticated scope-bound database identities plus RLS and composite constraints | Mandatory contract invariant |
+| Staging/production separation | Separate environments and credentials; no shared signing secrets | Required; implementation evidence pending |
+| Database topology alternatives | Compare shared DB/RLS, separate DBs within one cluster, and separate clusters/instances | ADR approval pending |
+| Backup/restore and DR | Customer-controlled, tested, tenant-safe restore and recovery; named operators | Owner and evidence pending |
+| Pooler | Exact product/version/mode selected only after session_user conformance test | OPEN |
+| PostgreSQL version | Explicitly selected and supported version | OPEN |
+| Capacity and performance | Derived from approved workload model and load test; no assumed scale | OPEN |
+| Operational authority | Named customer and CEPHAS owners for provisioning, revocation, tombstones, keys, backup, incident response | OPEN |
+
+### 19.3 Capacity model — values must come from workload evidence
+
+Do not choose a tenant count, BU count, role count, pool size or connection budget by guesswork. For each pilot customer, record:
+
+- Number of legal tenants and business units, including explicit tenant-wide scopes.
+- Maximum simultaneously active scopes.
+- Peak concurrent authenticated users, API requests, protected transactions and background jobs.
+- Peak connection demand by scope and aggregate connection budget.
+- Provisioning, deprovisioning and credential-rotation events per hour/day.
+- Expected data volume, audit-event rate, retention and backup growth.
+- Availability, recovery-time and recovery-point objectives.
+- Expected utility network latency, outage duration and disconnected operation requirements.
+- Peak-load test profile, safety margin, measured resource consumption and tested failure behaviour.
+
+Calculate and test pool budgets against the selected PostgreSQL and pooler limits, including administrative, migration, monitoring, backup and emergency reserve connections. The sum of all per-scope pools must never exceed the approved global database connection budget. Pool exhaustion must cause bounded backpressure; it must never trigger a shared-login or cross-scope fallback.
+
+### 19.4 Gate 0 parameter approval and evidence matrix
+
+The companion file `docs/POWEROPS_0.1.1_DEPLOYMENT_PROFILE.template.yaml` is the required version-controlled profile template. Every `null`, `TBD` or `UNAPPROVED` field is a release blocker for its dependent gate. The deployment owner must approve exact values and evidence; engineering may not fill them with arbitrary defaults.
+
+| Gate 0 group | Required decision/evidence | Required approver |
+|---|---|---|
+| IC-03-R2 execution/revocation | Numeric transaction/query/job maxima; new-work revocation propagation; positive membership-cache bound; query/session/job cancellation deadlines; in-flight write rollback/completion rule; outage behaviour | Customer security owner and PowerOps service owner |
+| IC-05-R1 capacity/pooler | Workload/capacity model; per-scope pool min/max; global connection budget/reserve; churn/rotation rates; exact PostgreSQL and pooler product/version/mode; measured `session_user` preservation | Customer DBA/platform owner and PowerOps engineering owner |
+| IC-06-R2 topology | Approved ADR-PWR-001; selected topology; threat model; operations, backup/restore, DR, migration and cost evidence | Customer architecture/security authority |
+| IC-04-R4 endpoint | Exact HTTP client/version; DNS cache age; absolute connection age; idle timeout; policy invalidation bound; proxy product/version/evidence retention if applicable; destination policy | Customer network/security owner |
+| IC-01-R4 identity/fencing | OIDC issuer/provider profile; immutable human identity uniqueness source; signing algorithm/key custody/rotation/revocation; approval lifetime; replay ledger; fence authority consistency and outage behaviour; named operational owners | Customer IAM/security owner |
+| Operational resilience | RTO/RPO; backup custody; restore test; cluster identity and tombstone recovery; incident response and emergency access | Customer operations/security owner |
+
+### 19.5 Implementation sequencing and stop conditions
+
+1. Approve ADR-PWR-001 and the deployment profile before finalising topology-dependent implementation.
+2. Build provider-neutral OIDC adapter/conformance harness and test harnesses only where their contracts are stable; do not enable an unapproved provider.
+3. Implement authenticated scope identity, mapping, RLS and SECURITY DEFINER hardening against the approved PostgreSQL version/topology.
+4. Implement revocation, retirement fencing, tombstone registry and recovery against the approved consistency and timing profile.
+5. Implement the selected pooler and prove `session_user` preservation under normal, failure, restart and credential-rotation conditions.
+6. Implement JWKS endpoint retrieval using the selected HTTP client and approved endpoint profile; prove actual socket peer, TLS identity, DNS freshness, redirects, proxies and pool invalidation.
+7. Run the full PostgreSQL adversarial, identity, revocation, crash/recovery, endpoint and capacity suite against production-equivalent components.
+8. Obtain independent security and qualified power-systems reviews before any consideration of deployment or integration.
+
+A gate cannot pass because its value is documented alone: the value must be approved by the named owner and supported by reproducible tests/evidence. Any unapproved, missing, stale or out-of-range value fails closed. No pilot or production activation is authorised by this planning document.
+
+### 19.6 Consolidated closure status
+
+- **IC-01-R3:** contract requirements specified; implementation and recovery evidence outstanding.
+- **IC-01-R4:** contract requirements specified; identity uniqueness, approval executor and fencing implementation/evidence outstanding.
+- **IC-03-R2:** OPEN pending approved numeric execution/revocation profile and runtime proof.
+- **IC-04-R3:** contract requirements specified; actual HTTP-client/socket evidence outstanding.
+- **IC-04-R4:** contract requirements specified; approved endpoint profile and actual-client evidence outstanding.
+- **IC-05-R1:** OPEN pending approved capacity and exact pooler profile, plus measured conformance.
+- **IC-06-R2:** OPEN pending signed ADR-PWR-001 and topology/recovery evidence.
+- **IC-07:** OPEN pending reproducible PostgreSQL adversarial evidence bundle.
+
+**Release boundary:** Section 19 is an architecture recommendation and decision framework. It does not claim owner approval, select unknown numerical values, close Gate 0, authorise merge, or authorise deployment, production data, live utility connectivity, SCADA/DMS integration or operational control.

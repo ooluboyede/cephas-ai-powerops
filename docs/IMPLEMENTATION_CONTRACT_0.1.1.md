@@ -530,3 +530,98 @@ Gate 1 role-mapping implementation must not pass without the cluster identity an
 | IC-06-R2 | Medium | Actual topology ADR remains OPEN at Gate 0 |
 
 This revision does not select deployment values or topology on behalf of the deployment owner. It does not authorise merge, production deployment, customer-data processing, certification, live utility integration or SCADA/DMS operational activation.
+
+
+## 17. Independent security re-review remediation — IC-01-R3 and IC-04-R3
+
+**Review decision addressed:** APPROVED WITH CONDITIONS  
+**Prior exact reviewed commit:** `8d22e33015f313614f8395fde63915156b1f8864`  
+**Prior CI evidence:** workflow run #71, run ID `42859034512`, quality job ID `129979844975`  
+**Scope:** specification and acceptance-test refinement only. No implementation, deployment or production approval is implied.
+
+### IC-01-R3 — Tombstone authority separation and crash-safe lifecycle (Medium)
+
+The authoritative retired-identity registry must have three logically and technically separate authority classes. These are required service/principal roles; each deployment must bind them to concrete workload identities, credentials and named human owners in its approved operational profile:
+
+1. **Tombstone append authority — `powerops_tombstone_writer`:** a narrowly scoped deprovisioning service identity permitted to append a new retirement event and read back its committed receipt. It cannot reconcile catalog/mapping state, approve or execute exceptional removal, alter registry policy, or rewrite/delete existing events.
+2. **Reconciliation authority — `powerops_tombstone_reconciler`:** a separate recovery/provisioning service identity permitted to read the authoritative registry and perform controlled catalog/mapping reconciliation. It cannot append retirement events on behalf of the writer, approve exceptional removal, or delete/modify historical events.
+3. **Exceptional-removal approval and execution:** approval requires two distinct named security approvers, neither of whom may be the requesting operator or the writer/reconciler workload identity. Execution is performed by a separately controlled break-glass mechanism after both approvals; it cannot be performed by ordinary provisioning, migration, restore or runtime identities. The request, rationale, affected `(cluster_identity, role_oid)`, approvals, execution result and immutable audit reference must be retained. Exceptional removal is not a normal lifecycle operation.
+
+The registry must enforce append-only event semantics. The deployment must document its concrete identity provider, authentication method, authorization boundary, credential custody/rotation, separation of duties, emergency access and named operational owners. The logical role names above are mandatory authority classes, not claims that corresponding cloud or database principals already exist.
+
+#### Required deprovisioning protocol
+
+Deprovisioning must be fail-closed across crashes and partial failures:
+
+1. Create a unique, immutable retirement event identifier and append a durable retirement intent for `(cluster_identity, role_oid)` to the independent authoritative registry.
+2. Wait for the registry's durable commit receipt. If append or receipt verification fails, do not report deprovisioning as complete; block new protected work for the affected identity/scope through the deployment's fail-closed control path.
+3. Once the retirement intent is durably recorded, disable/revoke the database login and credentials, prevent new protected work, invalidate relevant application/pool credentials and terminate or drain affected sessions under the approved Gate 0 policy.
+4. Reconcile the PostgreSQL catalog and active role-to-scope mapping against the authoritative retirement record. Remove/disable the active mapping and verify the role cannot authenticate or regain a scope.
+5. Mark the event reconciled using a separate append-only completion event. Only then may the workflow report successful deprovisioning.
+
+A crash at any step must be resumable by event ID. Retries must be idempotent: duplicate delivery of the same event ID returns the existing outcome and cannot create a second conflicting retirement identity. Conflicting events for the same cluster-scoped role identity must fail closed and raise an audited reconciliation incident. No retry may erase or supersede a retirement record.
+
+The registry must have independently controlled backup and recovery, integrity verification (including authenticated integrity metadata), retention, access logging and restore testing. Its recovery point must not permit a PostgreSQL point-in-time restore to erase a later committed retirement event. Registry restore must verify event-chain/sequence integrity and reconcile against the cluster catalog and mappings before protected traffic is re-enabled. Registry unavailability, integrity failure, sequence gaps, stale recovery state or uncertain cluster identity disables protected identity resolution.
+
+#### Mapping-key consistency
+
+Clarify the Section 3 mapping model as follows:
+
+- For a cluster-local mapping store, the PostgreSQL role OID is meaningful only within that one identified cluster; the mapping store must be cryptographically/configurationally bound to that cluster identity and must reject use against another cluster.
+- For any centrally shared mapping or provisioning registry, the active identity key must be the composite `(cluster_identity, role_oid)`; role OID alone is never a globally unique key.
+- The authoritative retirement registry always uses `(cluster_identity, role_oid)`, irrespective of whether active mappings are cluster-local or centrally stored.
+- Provisioning must verify the target cluster identity and reject a retired composite key before creating or activating a role mapping.
+
+#### Additional acceptance tests
+
+- **C01-26:** prove only the configured writer workload can append retirement intents; runtime, migration, restore and reconciler identities cannot append.
+- **C01-27:** prove reconciliation authority is distinct from writer authority and cannot approve or execute exceptional removal.
+- **C01-28:** prove exceptional removal requires two distinct authorised security approvers and a separately controlled executor; self-approval and single-person approval fail.
+- **C01-29:** inject a crash/failure after every deprovisioning persistence and revocation step; retries resume safely, no protected identity is reactivated, and the final state is reconciled.
+- **C01-30:** replay duplicate event IDs and duplicate retirement deliveries; processing is idempotent and produces one authoritative retirement identity.
+- **C01-31:** restore the independent registry from backup; verify integrity, sequence continuity, retention and recovery of all committed retirement events before reconciliation.
+- **C01-32:** attempt unauthorised registry append, reconciliation, alteration, deletion and exceptional removal; each is denied and audited.
+- **C01-33:** use identical numeric role OIDs in two clusters; central mappings and tombstones remain distinct by `cluster_identity`, and cluster-local stores reject cross-cluster use.
+- **C01-34:** interrupt registry append before durable commit; deprovisioning is not reported complete and protected work fails closed for the affected identity.
+- **C01-35:** simulate registry rollback, stale restore, integrity failure and sequence gap; protected identity resolution remains disabled.
+
+### IC-04-R3 — DNS validation-to-connection binding (Medium)
+
+Destination validation and socket connection must be one controlled operation. It is insufficient to validate a DNS answer and then allow the HTTP stack to resolve the hostname independently when opening the connection.
+
+For every discovery and JWKS request:
+
+- Resolve the configured, allowlisted hostname using the deployment's approved resolver policy and validate **every** returned A and AAAA address against the destination policy.
+- Select only a validated address and bind the actual socket connection to that exact address. The HTTP client must not perform a second hostname resolution that can change the destination between validation and connection.
+- Preserve normal TLS hostname verification, certificate validation and SNI for the configured hostname while connecting to the validated address. Do not replace hostname verification with IP-address certificate matching.
+- If the HTTP library cannot safely bind a connection to the validated address while preserving hostname-based TLS verification, it must not be used for this trust-sensitive fetch path.
+- Reject a DNS answer containing any prohibited address unless the deployment has an explicit, narrowly scoped approval for that exact destination. Apply policy to every address in CNAME resolution chains and to both IPv4 and IPv6.
+- Disable automatic redirects by default. For any explicitly approved same-origin redirect, repeat resolution, destination validation and connection binding for the redirect target before connecting.
+- Disable ambient proxy use by default. If an explicitly approved egress proxy is required, the proxy becomes part of the trusted network boundary and must enforce the same destination policy on the actual upstream connection; client-side validation alone is not sufficient.
+- Connection pooling must not bypass current destination policy. Reuse is permitted only where the peer address is known, remains approved, and the connection's origin/trust binding is unchanged. On DNS/policy change, expiry, redirect, proxy-policy change or uncertainty, discard affected pooled connections and perform fresh validated resolution and connection binding.
+- Record the configured hostname, resolved address set, selected peer address, TLS identity, redirect decision, policy version and fetch outcome in security audit evidence without logging secrets or token contents.
+- Never accept discovery metadata or signing keys from a request whose actual connected peer cannot be proven to satisfy the approved destination policy.
+
+#### Additional acceptance tests
+
+- **C04-28:** change DNS between validation and socket creation; the client connects only to the exact validated address or fails closed.
+- **C04-29:** provide mixed permitted and prohibited IPv4/IPv6 answers; prohibited answers cause rejection under the configured all-address policy.
+- **C04-30:** use a CNAME chain whose terminal address is prohibited; request is rejected before metadata or keys are trusted.
+- **C04-31:** redirect to an approved hostname that resolves to a prohibited address; the redirect is rejected before connection.
+- **C04-32:** change DNS/policy after a connection is pooled; stale pooled connections are discarded and cannot bypass the new policy.
+- **C04-33:** configure an ambient or malicious proxy that routes to a prohibited destination; fetch is rejected. An explicitly approved proxy must prove upstream destination enforcement.
+- **C04-34:** verify the actual socket peer equals the selected validated address while TLS SNI, certificate chain and hostname verification remain bound to the configured hostname.
+- **C04-35:** verify IPv4, IPv6, CNAME, redirect, connection reuse and DNS-rebinding cases against the actual HTTP client implementation, not mocks alone.
+- **C04-36:** simulate resolver failure, inconsistent answers and policy-version changes during retrieval; no unvalidated discovery document or JWKS is accepted.
+
+### Consolidated disposition and release boundary
+
+| Finding | Severity | Contract disposition | Evidence still required |
+|---|---|---|---|
+| IC-01-R3 | Medium | Authority separation, lifecycle ordering, idempotency, recovery and mapping-key consistency specified | Implemented controls, crash/recovery tests and independent registry evidence |
+| IC-04-R3 | Medium | Validated-address connection binding, TLS hostname preservation, proxy and pool controls specified | Actual HTTP-client/socket tests and independent endpoint-security evidence |
+| IC-03-R2 | High | Gate 0 execution/revocation values remain OPEN | Deployment-owner-approved numerical profile |
+| IC-05-R1 | High | Gate 0 capacity and exact pooler remain OPEN | Approved capacity profile and exact pooler/version/mode |
+| IC-06-R2 | Medium | Topology ADR remains OPEN | Approved topology decision record |
+
+This section does not close the findings by documentation alone. It does not select deployment-specific principals, numerical limits, pooler, provider or topology without deployment-owner approval. All affected implementation gates remain blocked until their prerequisites, implementation and reproducible evidence are independently verified. No production deployment, customer-data processing, certification, live utility integration or SCADA/DMS operational activation is authorised.

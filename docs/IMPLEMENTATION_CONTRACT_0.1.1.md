@@ -1054,11 +1054,11 @@ The deployment profile must select and record a PostgreSQL-specific lock protoco
 9. Runtime evidence must identify the exact PostgreSQL build, isolation level, lock SQL/protocol, lock order, timeout/retry configuration and failover mode. C01-49–54 must be run against that exact build/topology; extend the evidence with actual lock wait graph/transaction ordering, commit outcome and persisted fence generation.
 
 **Additional acceptance tests**
-- **C01-61:** inspect every admission and retirement path; verify all acquire the same authoritative row lock and use the documented deterministic lock order.
-- **C01-62:** run concurrent admission/retirement races under the approved isolation level; capture database transaction order and prove no protected transaction starts after retirement commits.
-- **C01-63:** force lock timeout, deadlock and serialization failure; verify complete rollback, bounded retry, idempotency and fail-closed behavior.
-- **C01-64:** fail over during admission and retirement, including a lost commit acknowledgement; verify promotion cannot serve protected work until committed fence state is proven and ambiguous outcomes are reconciled without generation rollback.
-- **C01-65:** deliberately configure an unapproved isolation level, missing lock timeout, reverse lock order or asynchronous admission read; profile validation or runtime startup rejects the configuration.
+- **C01-72:** inspect every admission and retirement path; verify all acquire the same authoritative row lock and use the documented deterministic lock order.
+- **C01-73:** run concurrent admission/retirement races under the approved isolation level; capture database transaction order and prove no protected transaction starts after retirement commits.
+- **C01-74:** force lock timeout, deadlock and serialization failure; verify complete rollback, bounded retry, idempotency and fail-closed behavior.
+- **C01-75:** fail over during admission and retirement, including a lost commit acknowledgement; verify promotion cannot serve protected work until committed fence state is proven and ambiguous outcomes are reconciled without generation rollback.
+- **C01-76:** deliberately configure an unapproved isolation level, missing lock timeout, reverse lock order or asynchronous admission read; profile validation or runtime startup rejects the configuration.
 
 ### 21.2 IC-05-R3 — Separate PostgreSQL role ceilings (Medium)
 
@@ -1094,11 +1094,11 @@ The configured discovery URL must be bound to the approved issuer/provider profi
 The HTTP client must apply the existing DNS-to-socket binding, TLS hostname/SNI, redirect, proxy, address-class and connection-pool rules independently to both discovery and JWKS fetches. Redirects remain disabled by default; any approved redirect must be revalidated against the relevant allowlist at every hop. Discovery and JWKS origins must be independently auditable and revocable.
 
 **Additional acceptance tests**
-- **C04-18:** retrieve discovery metadata from an approved discovery origin whose advertised jwks_uri points to an unapproved origin; reject before opening a JWKS connection.
-- **C04-19:** approve a discovery origin but omit its JWKS origin; discovery may be retrieved, but key retrieval and token validation fail closed.
-- **C04-20:** approve a JWKS origin but not the discovery origin; discovery retrieval is rejected.
-- **C04-21:** test scheme, port, hostname normalization, user-info, wildcard, redirect, CNAME, IPv4/IPv6 and prohibited-address bypass attempts against both allowlists.
-- **C04-22:** change or revoke one allowlist independently; cached discovery/JWKS metadata and pooled connections are invalidated within the approved policy bound.
-- **C04-23:** supply token-directed jku/x5u or altered discovery metadata; no unapproved network request occurs and validation fails closed.
+- **C04-28:** retrieve discovery metadata from an approved discovery origin whose advertised jwks_uri points to an unapproved origin; reject before opening a JWKS connection.
+- **C04-29:** approve a discovery origin but omit its JWKS origin; discovery may be retrieved, but key retrieval and token validation fail closed.
+- **C04-30:** approve a JWKS origin but not the discovery origin; discovery retrieval is rejected.
+- **C04-31:** test scheme, port, hostname normalization, user-info, wildcard, redirect, CNAME, IPv4/IPv6 and prohibited-address bypass attempts against both allowlists.
+- **C04-32:** change or revoke one allowlist independently; cached discovery/JWKS metadata and pooled connections are invalidated within the approved policy bound.
+- **C04-33:** supply token-directed jku/x5u or altered discovery metadata; no unapproved network request occurs and validation fails closed.
 
 **Updated status:** IC-01-R8, IC-05-R3 and IC-04-R5 are addressed at contract/profile specification level only. Exact PostgreSQL lock parameters, role/credential limits, endpoint origins, runtime implementation and all related adversarial evidence remain deployment- or implementation-specific. Gate 0 remains OPEN. This section does not approve numeric values, select topology, certify implementation, authorise merge or permit deployment.

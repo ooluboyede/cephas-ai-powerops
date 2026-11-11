@@ -1,0 +1,350 @@
+# CEPHAS AI PowerOps 0.1.1 — customer deployment profile
+# TEMPLATE ONLY. Do not deploy with this file.
+# Every null / UNAPPROVED value is a release blocker for dependent gates.
+# Values must be supplied by the named deployment owner and approved in version control.
+
+profile:
+  id: "UNAPPROVED"
+  version: "0.1.1"
+  customer_deployment_id: null
+  customer_name_or_code: "IBDEC"
+  environment: null # staging | production
+  status: "UNAPPROVED"
+  approved_at_utc: null
+  approval_record_uri: null
+
+architecture:
+  commercial_model: "one_customer_controlled_deployment_per_utility_customer"
+  commercial_model_status: "RECOMMENDED_NOT_APPROVED"
+  cross_customer_shared_runtime: false
+  cross_customer_shared_runtime_status: "PROHIBITED_FOR_INITIAL_REFERENCE_MODEL"
+  postgres_topology: "dedicated_cluster_or_independently_administered_instance_per_customer"
+  postgres_topology_status: "RECOMMENDED_NOT_APPROVED"
+  postgres_version: null
+  database_names_and_boundaries: []
+  tenant_and_business_unit_isolation: "scope_bound_database_identity_plus_rls"
+  separate_staging_and_production: true
+  staging_production_separation_evidence: null
+  adr_id: "ADR-PWR-001"
+  adr_approval_status: "UNAPPROVED"
+  adr_approval_record: null
+
+capacity:
+  tenant_count: null
+  business_units_per_tenant_max: null
+  tenant_wide_scopes_count: null
+  active_scopes_max: null
+  concurrent_users_peak: null
+  concurrent_api_requests_peak: null
+  concurrent_protected_transactions_peak: null
+  concurrent_jobs_peak: null
+  database_connection_limit: null
+  administrative_connection_reserve: null
+  per_scope_pool_min: null
+  per_scope_pool_max: null
+  global_pool_connection_budget: null
+  provisioning_events_per_hour_peak: null
+  credential_rotations_per_day_peak: null
+  audit_events_per_second_peak: null
+  expected_database_size_gb: null
+  annual_growth_percent: null
+  load_test_profile_uri: null
+  load_test_result_uri: null
+  capacity_owner: null
+  capacity_approval_record: null
+
+ic_03_execution_and_revocation:
+  max_transaction_duration_seconds: null
+  max_query_duration_seconds: null
+  max_job_duration_seconds: null
+  max_positive_membership_cache_seconds: null
+  max_new_work_revocation_propagation_seconds: null
+  max_query_cancellation_seconds: null
+  max_session_termination_seconds: null
+  max_job_cancellation_seconds: null
+  in_flight_write_policy: null # rollback | bounded_completion
+  in_flight_write_max_completion_seconds: null
+  authority_outage_policy: "fail_closed"
+  owner_customer_security: null
+  owner_powerops_service: null
+  approval_record: null
+  runtime_test_evidence_uri: null
+
+ic_05_database_and_pooler:
+  postgres_product: "PostgreSQL"
+  postgres_version: null
+  pooler_product: null
+  pooler_version: null
+  pooler_mode: null
+  pooler_configuration_uri: null
+  session_user_preservation_required: true
+  session_user_conformance_evidence_uri: null
+  pool_exhaustion_policy: "bounded_backpressure_fail_closed_no_shared_login_fallback"
+  credential_rotation_test_evidence_uri: null
+  owner_customer_dba: null
+  owner_powerops_engineering: null
+  approval_record: null
+
+ic_06_topology:
+  selected_option: null # shared_db_rls | separate_databases_one_cluster | separate_clusters_or_instances
+  selected_option_status: "UNAPPROVED"
+  threat_model_uri: null
+  rejected_alternatives_and_rationale_uri: null
+  migration_and_rollback_evidence_uri: null
+  backup_policy_uri: null
+  backup_custodian: null
+  restore_test_evidence_uri: null
+  disaster_recovery_plan_uri: null
+  rto_minutes: null
+  rpo_minutes: null
+  failover_test_evidence_uri: null
+  cross_tenant_analytics_design_uri: null
+  owner_customer_architecture_security: null
+  approval_record: null
+
+ic_04_endpoint_security:
+  http_client_product: null
+  http_client_version: null
+  dns_max_cache_age_seconds: null
+  connection_max_absolute_age_seconds: null
+  connection_idle_timeout_seconds: null
+  policy_invalidation_max_seconds: null
+  http2_enabled: null
+  http2_cross_origin_coalescing: false
+  proxy_mode: "disabled" # disabled | explicitly_approved
+  proxy_product: null
+  proxy_version: null
+  proxy_upstream_evidence_format: null
+  proxy_evidence_retention_days: null
+  # Exact normalized HTTPS origins (scheme, hostname, effective port); no implicit wildcard.
+  allowed_discovery_origins: []
+  allowed_jwks_origins: []
+  # Exact issuer-bound endpoint URI bindings; path is exact/case-sensitive after contract normalization.
+  # Query strings are prohibited unless the complete permitted query policy is explicitly bound.
+  discovery_endpoint_bindings: []
+  jwks_endpoint_bindings: []
+  endpoint_path_policy_version: null
+  endpoint_path_normalization_policy_uri: null
+  discovery_endpoint_binding_evidence_uri: null
+  jwks_endpoint_binding_evidence_uri: null
+  discovery_issuer_binding_policy_uri: null
+  discovery_jwks_uri_origin_validation_evidence_uri: null
+  discovery_and_jwks_redirect_policy_uri: null
+  discovery_origin_rejection_test_evidence_uri: null
+  jwks_origin_rejection_test_evidence_uri: null
+  prohibited_destination_policy_uri: null
+  actual_socket_peer_test_evidence_uri: null
+  tls_identity_test_evidence_uri: null
+  dns_rebinding_test_evidence_uri: null
+  pool_invalidation_test_evidence_uri: null
+  owner_customer_network_security: null
+  approval_record: null
+
+ic_01_identity_approval_and_fencing:
+  oidc_provider: null
+  oidc_issuer: null
+  oidc_audience: null
+  oidc_profile_uri: null
+  human_identity_uniqueness_source: null
+  distinct_person_verification_method: null
+  approval_signature_algorithm: null
+  signing_key_custodian: null
+  signing_key_rotation_policy_uri: null
+  signing_key_revocation_procedure_uri: null
+  exceptional_approval_max_age_seconds: null
+  approval_replay_ledger_product: null
+  approval_ledger_consistency_model: null
+  approval_consumption_transaction_model: null
+  approval_consumption_uniqueness_and_idempotency_constraint: null
+  approval_consumption_failover_semantics: null
+  retirement_fence_authority: null
+  retirement_fence_consistency_model: null
+  retirement_fence_lock_protocol: null # PostgreSQL transaction-scoped row lock on authoritative composite fence row
+  retirement_fence_lock_sql_or_implementation_reference: null
+  retirement_fence_transaction_isolation_level: null
+  retirement_fence_lock_ordering_rule: null
+  retirement_fence_lock_timeout_seconds: null
+  retirement_fence_deadlock_policy: null
+  retirement_fence_retry_limit: null
+  retirement_fence_failover_durability_semantics: null
+  retirement_fence_ha_mode: null # synchronous_replication | synchronous_quorum | vendor_equivalent
+  retirement_fence_synchronous_standby_or_quorum_policy: null
+  retirement_fence_synchronous_commit_setting: null # Native PostgreSQL fence transactions: on | remote_apply only; remote_write | local | off prohibited
+  retirement_fence_synchronous_commit_allowed_values: ["on", "remote_apply"]
+  retirement_fence_synchronous_commit_scope: "every_fence_and_retirement_transaction"
+  retirement_fence_synchronous_commit_override_policy: "caller_sql_and_transaction_local_downgrade_prohibited; protected_wrapper_owns_connection_and_commit"
+  retirement_fence_synchronous_commit_effective_value_evidence_uri: null
+  retirement_fence_synchronous_standby_names_evidence_uri: null
+  retirement_fence_synchronous_quorum_acknowledgement_evidence_uri: null
+  retirement_fence_synchronous_commit_negative_test_evidence_uri: null
+  retirement_fence_synchronous_commit_wrapper_conformance_evidence_uri: null
+  retirement_fence_fsync_setting: null # Native PostgreSQL: must be on
+  retirement_fence_storage_flush_durability_evidence_uri: null
+  retirement_fence_eligible_promotion_candidates: []
+  retirement_fence_failover_controller_product_version: null
+  retirement_fence_former_primary_write_fencing_method: null
+  retirement_fence_former_primary_fencing_evidence_uri: null
+  retirement_fence_acknowledged_commit_lsn_evidence_uri: null
+  retirement_fence_promoted_timeline_and_wal_position_evidence_uri: null
+  retirement_fence_promotion_reconciliation_barrier_uri: null
+  retirement_fence_ambiguous_commit_recovery_procedure_uri: null
+  retirement_fence_primary_authority_and_replica_policy: null
+  retirement_fence_concurrency_evidence_c01_49_54_and_72_76_uri: null
+  exact_postgres_build_lock_protocol_evidence_uri: null
+  fence_authority_outage_policy: "deny_new_protected_work"
+  tombstone_writer_workload_identity: null
+  tombstone_reconciler_workload_identity: null
+  exceptional_removal_executor_identity: null
+  exceptional_removal_two_person_control: true
+  independent_tombstone_backup_uri: null
+  tombstone_restore_test_evidence_uri: null
+  owner_customer_iam_security: null
+  owner_customer_operations: null
+  approval_record: null
+
+operations:
+  powerops_mode: "advisory_only"
+  scada_dms_connectivity: false
+  dispatch_switching_protection_controls: false
+  production_data_authorised: false
+  production_deployment_authorised: false
+  customer_network_integration_authorised: false
+  incident_response_runbook_uri: null
+  emergency_access_policy_uri: null
+  audit_retention_days: null
+  audit_integrity_verification_evidence_uri: null
+  customer_security_contact: null
+  powerops_security_contact: null
+  independent_security_review_uri: null
+  qualified_power_systems_review_uri: null
+
+release_gates:
+  gate_0_owner_decisions_approved: false
+  gate_1_identity_and_database_isolation: "BLOCKED"
+  gate_2_revocation_and_long_running_work: "BLOCKED"
+  gate_3_topology_and_capacity: "BLOCKED"
+  gate_4_jwks_endpoint_security: "BLOCKED"
+  gate_5_pooler_and_runtime_conformance: "BLOCKED"
+  gate_6_recovery_and_operational_evidence: "BLOCKED"
+  independent_implementation_review: "NOT_STARTED"
+  release_authorisation: false
+
+
+# IC-01-R6 — stable cluster identity and tombstone registry lifecycle
+cluster_identity:
+  source_or_issuer: null
+  format: null
+  provisioning_authority: null
+  persistence_and_integrity_control: null
+  clone_restore_identity_policy: null
+  duplicate_active_instance_prevention: null
+  original_instance_fencing_evidence_uri: null
+  identity_reconciliation_owner: null
+  mapping_store_mode: null # cluster_local | central
+  cluster_identity_binding_and_verification_method: null
+  central_store_composite_key_required: true
+
+tombstone_registry:
+  authoritative_owner_or_service: null
+  consistency_and_commit_model: null
+  product_or_service_identity: null
+  recovery_point_objective_seconds: null
+  sequence_authority: null
+  append_only_integrity_control: null
+  independent_backup_uri: null
+  backup_integrity_evidence_uri: null
+  restore_reconciliation_procedure_uri: null
+  restore_reconciliation_evidence_uri: null
+  conflict_response: "deny_new_protected_work"
+
+# IC-01-R7 — exceptional-removal canonical approvals and actor separation
+exceptional_removal:
+  canonical_serialization_version: null
+  digest_algorithm: null
+  requester_identity_source: null
+  approver_identity_source: null
+  requester_approver_executor_separation: "required_distinct_principals"
+  executor_workload_identity: null
+  approval_ledger_authority: null
+  approval_ledger_product: null
+  approval_ledger_consistency_model: null
+  approval_ledger_durability_and_recovery_uri: null
+  approval_consumption_atomicity_evidence_uri: null
+  approval_audit_evidence_uri: null
+  approval_trust_and_verification_profile_uri: null
+  permitted_signature_algorithms_and_key_types: []
+  minimum_approver_authentication_assurance_level: null
+  human_identity_proofing_policy_uri: null
+  signing_key_rotation_test_evidence_uri: null
+  signing_key_revocation_test_evidence_uri: null
+  wrong_algorithm_or_key_test_evidence_uri: null
+  insufficient_assurance_test_evidence_uri: null
+  concurrent_atomic_consumption_test_evidence_uri: null
+
+# IC-03-R3 — JWT clock and synchronisation policy
+ic_03_clock_synchronisation:
+  max_jwt_clock_skew_seconds: null # 60 seconds is provisional baseline; deployment approval required
+  trusted_time_source: null
+  synchronisation_method: null
+  time_sync_monitoring: null
+  drift_alert_threshold_seconds: null
+  time_sync_failure_policy: "fail_closed"
+  exception_above_60_seconds_approval_uri: null
+
+# IC-05-R2 — explicit database role and credential ceilings
+role_credential_capacity:
+  # S=existing scope-bound roles; P=existing non-scope platform/service roles.
+  # S_r/P_r=uncreated reserved slots. L=scope ceiling; M=total cluster ceiling; R=platform/service reserve.
+  # R is a subset of M, never additive. Enforce S+S_r<=L; P+P_r<=R;
+  # S+P<=M; and S+P+S_r+P_r<=M. Scope roles count once in S+P.
+  max_scope_bound_login_roles: null # L
+  max_postgres_roles_total_cluster_wide: null # M
+  max_active_credentials: null
+  max_concurrent_credential_versions_during_rotation: null
+  max_retained_retired_role_tombstones: null
+  fixed_platform_and_service_role_reserve: null # R, slots inside M
+  reserved_scope_bound_role_slots: null # S_r, not yet-created roles
+  reserved_platform_service_role_slots: null # P_r, not yet-created roles
+  role_inventory_includes_migration_monitoring_backup_pooler_emergency: true
+  scope_role_count_reconciliation_evidence_uri: null
+  total_cluster_role_count_reconciliation_evidence_uri: null
+  capacity_calculation_evidence_uri: null
+  exhaustion_test_evidence_uri: null
+
+# IC-06-R3 — the ADR must compare all three alternatives
+topology_decision_comparison:
+  options_required:
+    - "shared_database_scope_bound_roles_rls"
+    - "separate_databases_within_one_postgresql_cluster"
+    - "separate_postgresql_clusters_or_independently_administered_instances"
+  comparison_matrix_uri: null
+  signed_adr_uri: null
+  deployed_topology_conformance_evidence_uri: null
+
+# IC-07-R2 — consolidated, tamper-evident runtime evidence bundle
+ic_07_evidence_bundle:
+  bundle_uri: null
+  manifest_uri: null
+  manifest_schema_version: null
+  integrity_hash_algorithm: null
+  bundle_signature_or_attestation_uri: null
+  evidence_storage_and_access_policy_uri: null
+  retention_policy_uri: null
+  source_commit_sha: null
+  workflow_run_and_job_ids: []
+  environment_and_cluster_identity: null
+  postgres_build_and_configuration_digest: null
+  migration_ids_and_checksums_uri: null
+  role_privilege_and_rls_inventory_uri: null
+  session_user_and_scope_mapping_evidence_uri: null
+  adversarial_test_logs_uri: null
+  persisted_state_assertions_uri: null
+  backup_restore_and_recovery_evidence_uri: null
+  independent_reproduction_instructions_uri: null
+  independent_reviewer_report_uri: null
+  known_limitations_and_skipped_tests_uri: null
+  security_definer_definitions_owners_and_grants_uri: null
+  effective_role_privilege_inventory_uri: null
+  forced_enabled_rls_policy_inventory_uri: null
+  actual_session_user_cluster_scope_evidence_uri: null
+  approval_signature_and_key_lifecycle_test_evidence_uri: null

@@ -169,7 +169,15 @@ ic_01_identity_approval_and_fencing:
   retirement_fence_failover_durability_semantics: null
   retirement_fence_ha_mode: null # synchronous_replication | synchronous_quorum | vendor_equivalent
   retirement_fence_synchronous_standby_or_quorum_policy: null
-  retirement_fence_synchronous_commit_setting: null
+  retirement_fence_synchronous_commit_setting: null # Native PostgreSQL fence transactions: on | remote_apply only; remote_write | local | off prohibited
+  retirement_fence_synchronous_commit_allowed_values: ["on", "remote_apply"]
+  retirement_fence_synchronous_commit_scope: "every_fence_and_retirement_transaction"
+  retirement_fence_synchronous_commit_override_policy: "caller_sql_and_transaction_local_downgrade_prohibited; protected_wrapper_owns_connection_and_commit"
+  retirement_fence_synchronous_commit_effective_value_evidence_uri: null
+  retirement_fence_synchronous_standby_names_evidence_uri: null
+  retirement_fence_synchronous_quorum_acknowledgement_evidence_uri: null
+  retirement_fence_synchronous_commit_negative_test_evidence_uri: null
+  retirement_fence_synchronous_commit_wrapper_conformance_evidence_uri: null
   retirement_fence_eligible_promotion_candidates: []
   retirement_fence_failover_controller_product_version: null
   retirement_fence_former_primary_write_fencing_method: null

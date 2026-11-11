@@ -190,10 +190,15 @@ cluster_identity:
   duplicate_active_instance_prevention: null
   original_instance_fencing_evidence_uri: null
   identity_reconciliation_owner: null
+  mapping_store_mode: null # cluster_local | central
+  cluster_identity_binding_and_verification_method: null
+  central_store_composite_key_required: true
 
 tombstone_registry:
   authoritative_owner_or_service: null
   consistency_and_commit_model: null
+  product_or_service_identity: null
+  recovery_point_objective_seconds: null
   sequence_authority: null
   append_only_integrity_control: null
   independent_backup_uri: null
@@ -216,6 +221,15 @@ exceptional_removal:
   approval_ledger_durability_and_recovery_uri: null
   approval_consumption_atomicity_evidence_uri: null
   approval_audit_evidence_uri: null
+  approval_trust_and_verification_profile_uri: null
+  permitted_signature_algorithms_and_key_types: []
+  minimum_approver_authentication_assurance_level: null
+  human_identity_proofing_policy_uri: null
+  signing_key_rotation_test_evidence_uri: null
+  signing_key_revocation_test_evidence_uri: null
+  wrong_algorithm_or_key_test_evidence_uri: null
+  insufficient_assurance_test_evidence_uri: null
+  concurrent_atomic_consumption_test_evidence_uri: null
 
 # IC-03-R3 — JWT clock and synchronisation policy
 ic_03_clock_synchronisation:
@@ -269,3 +283,8 @@ ic_07_evidence_bundle:
   independent_reproduction_instructions_uri: null
   independent_reviewer_report_uri: null
   known_limitations_and_skipped_tests_uri: null
+  security_definer_definitions_owners_and_grants_uri: null
+  effective_role_privilege_inventory_uri: null
+  forced_enabled_rls_policy_inventory_uri: null
+  actual_session_user_cluster_scope_evidence_uri: null
+  approval_signature_and_key_lifecycle_test_evidence_uri: null

@@ -4,7 +4,7 @@
 **Baseline:** Specification-approved commit `1671057a7633a50046af0722e7e2db2f61496662`  
 **Purpose:** Capture deployment-specific decisions required by the 0.1.1 implementation contract before dependent implementation gates can pass.
 
-> This is a decision register, not an approved deployment profile. Do not use it to configure or deploy a customer environment. No customer, identity provider, numeric limit, database topology, pooler, cryptographic authority, operational owner, or production permission is inferred here.
+> This is a decision register, not an approved deployment profile. Do not use it to configure or deploy a customer environment. IBDEC is the confirmed target customer for this draft. No identity provider, numeric limit, database topology, pooler, cryptographic authority, operational owner, or production permission is inferred here.
 
 ## Decision status convention
 
@@ -19,7 +19,7 @@ Every decision must record the deployment/customer, decision value, rationale, a
 
 | Field | Current value | Required action |
 |---|---|---|
-| Initial customer / utility | TBD | Name the deployment owner/customer |
+| Initial customer / utility | **IBDEC** | Confirm the legal entity/deployment boundary and nominate accountable owners |
 | Deployment environment and region | TBD | Customer-approved environment and residency |
 | Customer security owner | TBD | Name and role |
 | Customer DBA/platform owner | TBD | Name and role |
@@ -149,7 +149,7 @@ Until the relevant deployment profile and dependent gates are explicitly approve
 
 Gate 0 may be proposed for closure only after all of the following are true:
 
-1. The first deployment customer and accountable owner roles are identified.
+1. The first deployment customer is identified as **IBDEC**; accountable owner roles and named approvers are still outstanding.
 2. All five decision groups above have complete, deployment-specific values.
 3. Each decision has the required named owner approval and traceable evidence.
 4. The deployment profile YAML is populated consistently with the approved register; no null/TBD/UNAPPROVED blocker remains for the applicable scope.
@@ -157,6 +157,6 @@ Gate 0 may be proposed for closure only after all of the following are true:
 6. The implementation team maps each decision to its dependent acceptance tests and exact tested product/version/configuration.
 7. Independent review confirms the evidence at the exact candidate commit.
 
-**Current Gate 0 result: NOT SATISFIED — owner decisions outstanding.**
+**Target deployment: IBDEC. Current Gate 0 result: NOT SATISFIED — IBDEC owner decisions and approvals outstanding.**
 
 Specification approval of the baseline does not approve this register, the deployment profile, implementation, customer integration, production release, or merge of PR #5.

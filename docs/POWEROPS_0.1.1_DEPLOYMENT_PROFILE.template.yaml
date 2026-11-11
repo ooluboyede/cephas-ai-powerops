@@ -161,7 +161,7 @@ ic_01_identity_approval_and_fencing:
   retirement_fence_failover_durability_semantics: null
   retirement_fence_ambiguous_commit_recovery_procedure_uri: null
   retirement_fence_primary_authority_and_replica_policy: null
-  retirement_fence_concurrency_evidence_c01_49_65_uri: null
+  retirement_fence_concurrency_evidence_c01_49_54_and_72_76_uri: null
   exact_postgres_build_lock_protocol_evidence_uri: null
   fence_authority_outage_policy: "deny_new_protected_work"
   tombstone_writer_workload_identity: null

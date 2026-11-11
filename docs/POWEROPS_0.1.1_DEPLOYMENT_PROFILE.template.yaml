@@ -119,6 +119,14 @@ ic_04_endpoint_security:
   # Exact normalized HTTPS origins (scheme, hostname, effective port); no implicit wildcard.
   allowed_discovery_origins: []
   allowed_jwks_origins: []
+  # Exact issuer-bound endpoint URI bindings; path is exact/case-sensitive after contract normalization.
+  # Query strings are prohibited unless the complete permitted query policy is explicitly bound.
+  discovery_endpoint_bindings: []
+  jwks_endpoint_bindings: []
+  endpoint_path_policy_version: null
+  endpoint_path_normalization_policy_uri: null
+  discovery_endpoint_binding_evidence_uri: null
+  jwks_endpoint_binding_evidence_uri: null
   discovery_issuer_binding_policy_uri: null
   discovery_jwks_uri_origin_validation_evidence_uri: null
   discovery_and_jwks_redirect_policy_uri: null
@@ -159,6 +167,16 @@ ic_01_identity_approval_and_fencing:
   retirement_fence_deadlock_policy: null
   retirement_fence_retry_limit: null
   retirement_fence_failover_durability_semantics: null
+  retirement_fence_ha_mode: null # synchronous_replication | synchronous_quorum | vendor_equivalent
+  retirement_fence_synchronous_standby_or_quorum_policy: null
+  retirement_fence_synchronous_commit_setting: null
+  retirement_fence_eligible_promotion_candidates: []
+  retirement_fence_failover_controller_product_version: null
+  retirement_fence_former_primary_write_fencing_method: null
+  retirement_fence_former_primary_fencing_evidence_uri: null
+  retirement_fence_acknowledged_commit_lsn_evidence_uri: null
+  retirement_fence_promoted_timeline_and_wal_position_evidence_uri: null
+  retirement_fence_promotion_reconciliation_barrier_uri: null
   retirement_fence_ambiguous_commit_recovery_procedure_uri: null
   retirement_fence_primary_authority_and_replica_policy: null
   retirement_fence_concurrency_evidence_c01_49_54_and_72_76_uri: null
@@ -265,13 +283,18 @@ ic_03_clock_synchronisation:
 
 # IC-05-R2 — explicit database role and credential ceilings
 role_credential_capacity:
-  # Login/scope-bound roles are also included in the cluster-wide total.
-  max_scope_bound_login_roles: null
-  max_postgres_roles_total_cluster_wide: null
+  # S=existing scope-bound roles; P=existing non-scope platform/service roles.
+  # S_r/P_r=uncreated reserved slots. L=scope ceiling; M=total cluster ceiling; R=platform/service reserve.
+  # R is a subset of M, never additive. Enforce S+S_r<=L; P+P_r<=R;
+  # S+P<=M; and S+P+S_r+P_r<=M. Scope roles count once in S+P.
+  max_scope_bound_login_roles: null # L
+  max_postgres_roles_total_cluster_wide: null # M
   max_active_credentials: null
   max_concurrent_credential_versions_during_rotation: null
   max_retained_retired_role_tombstones: null
-  fixed_platform_and_service_role_reserve: null
+  fixed_platform_and_service_role_reserve: null # R, slots inside M
+  reserved_scope_bound_role_slots: null # S_r, not yet-created roles
+  reserved_platform_service_role_slots: null # P_r, not yet-created roles
   role_inventory_includes_migration_monitoring_backup_pooler_emergency: true
   scope_role_count_reconciliation_evidence_uri: null
   total_cluster_role_count_reconciliation_evidence_uri: null

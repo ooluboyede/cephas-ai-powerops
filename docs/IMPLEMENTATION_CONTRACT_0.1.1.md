@@ -30,7 +30,7 @@ Out of scope: SCADA/DMS commands, dispatch, switching, protection settings, live
 ## 3. C-01 — Role-to-scope mapping integrity
 
 ### Implementation requirements
-- Key the protected mapping by PostgreSQL role OID, not role name alone. Role name may be retained only for diagnostics.
+- Key the protected mapping by the composite `(cluster_identity, role_oid)`, never by role name or role OID alone. `cluster_identity` is a stable, independently provisioned identity for one PostgreSQL cluster lifecycle; `role_oid` is interpreted only within that cluster. Role name may be retained only for diagnostics. Clone/restore identity lifecycle and duplicate-cluster fencing are governed by Section 20.
 - Enforce exactly one active scope per login role OID. Scope includes tenant ID and an explicit BU discriminator; tenant-wide scope is explicit.
 - Mapping table is owned by a dedicated provisioning/migration authority. Runtime roles have no INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES or ownership privileges.
 - The lookup function receives only the minimum SELECT capability; it cannot modify mapping state.
@@ -82,7 +82,7 @@ Out of scope: SCADA/DMS commands, dispatch, switching, protection settings, live
 ## 5. C-03 — Revocation and long-running work
 
 ### Implementation requirements
-- Default maximum positive membership-cache/revocation bound for new protected work: 30 seconds, unless stricter policy applies.
+- Contract-wide hard ceiling for positive membership-cache lifetime before admitting new protected work: 30 seconds. A deployment may select a stricter value; it may not select a longer value under this contract.
 - Explicitly distinguish new-work revocation from termination of already-running transactions, queries, sessions and jobs. A 30-second cache bound does not terminate in-flight work.
 - Define configurable hard maximums for protected transaction, query and job duration before release.
 - Revalidate membership at each protected unit of work and immediately before background-job execution.
@@ -118,7 +118,7 @@ Out of scope: SCADA/DMS commands, dispatch, switching, protection settings, live
 - Accept access tokens only; reject ID tokens and tokens intended for another client/API.
 - Validate exact issuer, expected audience and documented audience-array semantics, signature, algorithm, key type/strength, subject, token type/typ, exp, iat and nbf.
 - Define provider-specific azp requirements and validate where applicable.
-- Enforce maximum token lifetime and clock skew. Default maximum skew is 60 seconds; exceptions require documented evidence and review.
+- Enforce maximum token lifetime and clock skew. The 60-second clock-skew value is a provisional baseline default, not an automatically approved deployment value or a hard contract ceiling. Each deployment must set and approve its actual maximum; any value above 60 seconds requires a documented security exception, clock-synchronisation evidence and independent security approval. Missing or untrustworthy time synchronisation fails closed.
 - Reject missing, malformed, wrongly typed, future-issued, expired and overlong tokens.
 - JWKS trust, bounded cache/refresh, rollover, unknown-KID handling and emergency revocation must fail closed; no unbounded refresh or fail-open behavior.
 
@@ -169,9 +169,11 @@ Before production topology selection, record an architecture decision comparing:
 
 **Option A — shared database with scope-bound login roles:** RLS and per-scope pools as above; explicit role/connection scalability limits; tenant-wide access remains a separate explicit scope.
 
-**Option B — separate database per tenant:** independent credentials and authenticated database boundary per tenant; BU policy still explicitly enforced within each tenant DB; define migrations, backup/restore, DR, monitoring, connection limits and cross-tenant analytics.
+**Option B — separate databases within one PostgreSQL cluster:** distinct database names and tenant-specific login credentials, with explicit CONNECT/object privileges and tenant/BU RLS controls. PostgreSQL roles remain cluster-wide, so databases do not create independent role namespaces or independent cluster-administration boundaries. Define migration, backup/restore, DR, monitoring, connection limits and cross-tenant analytics.
 
-A separate schema in a shared database is not equivalent to an independent authenticated database boundary. The decision record must state selected topology, threat assumptions, guarantees, operational cost, scale and recovery. No production tenant data before review.
+**Option C — separate PostgreSQL clusters or independently administered instances:** separate cluster-level role namespaces, credentials, administration and recovery boundaries. Define network isolation, provisioning, patching, monitoring, backup/restore, DR, cross-cluster analytics and operational cost.
+
+A separate schema in a shared database is not equivalent to an independent authenticated database boundary. Separate databases in one cluster are also not equivalent to separate clusters: PostgreSQL roles are cluster-wide. The decision record must compare all three options, state selected topology, threat assumptions, guarantees, operational cost, scale and recovery. No production tenant data before review.
 
 | ID | Required evidence | Pass criterion |
 |---|---|---|
@@ -338,7 +340,7 @@ Run integration tests against the exact selected pooler version and mode. Prove 
 ### IC-06 — Approved topology decision record (Medium)
 
 Before production topology selection, create and approve a version-controlled architecture decision record that:
-- Selects shared database with scope-bound login roles/RLS or separate database per tenant.
+- Selects one of: shared database with scope-bound login roles/RLS; separate databases within one PostgreSQL cluster; or separate PostgreSQL clusters/independently administered instances.
 - Records the rejected alternative and rationale.
 - Defines tenant/BU threat assumptions, trust boundaries, credentials and network boundaries.
 - Covers migration/rollback, backup/restore, disaster recovery, monitoring, connection limits, cross-tenant analytics, operational ownership and cost.
@@ -839,6 +841,11 @@ A gate cannot pass because its value is documented alone: the value must be appr
 
 - **IC-01-R3:** contract requirements specified; implementation and recovery evidence outstanding.
 - **IC-01-R4:** contract requirements specified; identity uniqueness, approval executor and fencing implementation/evidence outstanding.
+- **IC-01-R5 through R7:** Section 20 specifies atomic admission/fence ordering, cluster identity lifecycle, and requester/approver/executor separation; implementation and concurrency/recovery evidence outstanding.
+- **IC-03-R3:** Section 20 classifies the 30-second membership-cache ceiling and 60-second clock-skew baseline; deployment-specific clock configuration and synchronisation evidence outstanding.
+- **IC-05-R2:** Section 20 adds explicit database role and credential ceilings to the profile; owner values and load/provisioning evidence outstanding.
+- **IC-06-R3:** Section 20 aligns the three topology alternatives across the contract and ADR; signed ADR outstanding.
+- **IC-07-R2:** Section 20 defines the consolidated evidence manifest and profile references; reproducible runtime bundle outstanding.
 - **IC-03-R2:** OPEN pending approved numeric execution/revocation profile and runtime proof.
 - **IC-04-R3:** contract requirements specified; actual HTTP-client/socket evidence outstanding.
 - **IC-04-R4:** contract requirements specified; approved endpoint profile and actual-client evidence outstanding.
@@ -847,3 +854,171 @@ A gate cannot pass because its value is documented alone: the value must be appr
 - **IC-07:** OPEN pending reproducible PostgreSQL adversarial evidence bundle.
 
 **Release boundary:** Section 19 is an architecture recommendation and decision framework. It does not claim owner approval, select unknown numerical values, close Gate 0, authorise merge, or authorise deployment, production data, live utility connectivity, SCADA/DMS integration or operational control.
+
+
+## 20. Consolidated independent re-review remediation — IC-01-R5 through IC-07-R2
+
+**Review basis:** independent security re-review of exact commit `4705daefe285fcc9352a59110807804b2d3c9e60`.  
+**Purpose:** close specification gaps identified in that review. This section changes contract requirements and acceptance tests only; it does not claim implementation, Gate 0 approval or runtime evidence.
+
+### 20.1 IC-01-R5 — Atomic protected-work admission relative to retirement fencing (High)
+
+A point-in-time fence check followed by an independently delayed operation is insufficient. A request must not pass an admission check, pause, and begin protected work after the retirement fence has committed.
+
+**Required linearization semantics**
+
+1. Define the authoritative retirement-fence record for each `(cluster_identity, role_oid)` with a monotonic generation and lifecycle state. The admission authority and protected database transaction must share a linearizable/transactional enforcement point, or use a resource-enforced fencing-token protocol with equivalent guarantees.
+2. For PostgreSQL-protected work, the admission path must acquire a transaction-scoped lock on the authoritative identity/fence row, verify the identity is active and the supplied generation is current, and begin the protected database unit of work while that lock is held. The lock must remain held through the protected transaction's commit or rollback. The fence writer must acquire the conflicting lock, persist the retirement intent and increment the generation in the same transaction, then commit.
+3. This establishes a single ordering: a protected transaction that acquires the lock first is already admitted and is governed by the approved IC-03 in-flight-work policy; a retirement transaction that commits first causes every later admission to observe the retired state/new generation and reject. A permit or token issued before work begins is not, by itself, admission and must not be usable to start work later.
+4. A queued background job is not admitted merely because it was enqueued or assigned a permit. The worker must acquire the current fence at actual execution start and establish the protected transaction under the same ordering. Queue state must not bypass the fence.
+5. For any non-database protected resource, the resource itself must atomically validate and enforce the monotonic fencing generation at the point of the protected effect. If the resource cannot enforce the generation, that operation is not eligible for this contract. No delayed bearer permit may authorise an effect after a newer retirement generation commits.
+6. Retirement intent and generation advancement must commit before the writer acknowledges the durable fence. The retirement writer must not bypass or invalidate an in-progress protected transaction; it waits for the admission lock and then commits the fence. Conversely, after that commit, no later protected transaction may acquire admission.
+7. Define lock ordering, transaction isolation, timeout/deadlock handling and failure behavior for the selected database/version. Any uncertain lock, stale generation, authority outage or inability to prove ordering fails closed. No admission based only on a cache, asynchronously replicated read, or eventually consistent status.
+8. This ordering governs new work. Handling of transactions admitted before the fence commit remains controlled by the approved IC-03 policy; this section does not silently choose rollback or bounded completion.
+
+**Additional deterministic acceptance tests**
+
+- **C01-49:** pause a request after it begins admission but before its first protected SQL statement; race retirement. Verify lock ordering means either the protected transaction is already admitted and retirement waits, or retirement commits first and the request is denied. No protected SQL may begin after a committed retirement fence.
+- **C01-50:** hold a protected transaction open while retirement attempts to commit; verify retirement cannot commit its fence ahead of the admitted transaction's lock, and new admissions queue/reject according to policy.
+- **C01-51:** commit retirement first, then release a previously issued but not yet used admission permit; verify the permit cannot start work.
+- **C01-52:** enqueue a job before retirement, pause the worker, commit retirement, then resume the worker; execution is rejected at actual start.
+- **C01-53:** test concurrent admission and retirement repeatedly under the exact PostgreSQL isolation/locking configuration; assert transaction order and persisted rows, not only API responses.
+- **C01-54:** inject lock timeout, deadlock, database failover, authority outage and ambiguous commit outcomes; uncertain admission/fence state fails closed and reconciliation is idempotent.
+- **C01-55:** for any non-database protected resource, submit a stale fencing generation after a newer generation commits; the resource rejects the operation. If no resource-side enforcement exists, the integration test must prove the operation is disabled.
+
+### 20.2 IC-01-R6 — Stable cluster identity and tombstone-registry lifecycle (Medium)
+
+The deployment profile must define:
+
+- The authoritative source/issuer and format of `cluster_identity`, the provisioning authority, uniqueness assurance and custody of its registration.
+- How the identity is persisted independently of mutable hostname, IP address, DNS name, filesystem clone or PostgreSQL role OID.
+- How a new cluster, cloned image, point-in-time restore, standby promotion and disaster-recovery restore obtain or retain a cluster identity.
+- A clone must never become active with a duplicated identity. It remains isolated from protected traffic until a unique identity is issued or an explicitly authorised original-identity recovery is completed.
+- A restored replacement may retain the original identity only after the former instance is demonstrably fenced from service and split-brain/duplicate-active operation is prevented. Otherwise it receives a new identity and undergoes controlled mapping/tombstone reconciliation.
+- The tombstone registry's authoritative owner, writer, consistency/commit semantics, sequence authority, append-only/integrity controls, independent backup and restore process.
+- The recovery procedure for registry loss, rollback, incomplete event sequence, duplicate cluster identity and disagreement between registry and PostgreSQL catalog. Conflicts disable protected work pending authorised reconciliation.
+- Registry authority and cluster-local mapping authority must be distinguished. The registry key is always composite `(cluster_identity, role_oid)`; a cluster-local mapping store may use `role_oid` only when its containing cluster identity is cryptographically/administratively bound and verified at runtime.
+
+**Additional acceptance tests**
+
+- **C01-56:** provision two clusters from the same image; verify they cannot both activate with one identity.
+- **C01-57:** restore a backup while the original cluster is still reachable; verify the restored instance remains isolated until the original is fenced or a new identity is assigned.
+- **C01-58:** change hostname/IP/DNS while retaining the same authorised cluster lifecycle; verify identity remains stable and is not inferred from network naming.
+- **C01-59:** simulate a cloned/stale registry or PostgreSQL catalog with a conflicting identity/role mapping; protected work remains disabled pending reconciliation.
+- **C01-60:** restore the tombstone registry from backup and verify sequence continuity, integrity, event completeness and reconciliation against the actual PostgreSQL catalog.
+
+### 20.3 IC-01-R7 — Exceptional-removal actor separation and approval configuration (Medium)
+
+Extend the exceptional-removal protocol so that:
+
+- The requester, each of the two approvers, and the execution workload identity are four distinct principals/roles. The executor is a dedicated non-human workload identity and cannot be the requester or either approver.
+- The two approvers are distinct verified natural persons, not merely distinct accounts. Both are independently authorised for the exact target environment and action.
+- The canonical approval digest covers a versioned canonicalisation scheme, digest algorithm, request ID/nonce, cluster identity, role OID, tombstone event/sequence, reason, requester, target environment, policy version, creation/expiry, and action. Any field change invalidates both approvals.
+- Approval verification and one-time consumption are atomic in the approved strongly consistent ledger. The ledger's product/authority, consistency model, durability, backup/recovery, retention, replay handling and audit evidence are deployment-profile decisions.
+- The executor re-fetches the canonical request and both approval records from the authoritative ledger, independently verifies signatures, identities, distinct-person status, role separation, expiry, revocation, policy and current tombstone state, and atomically consumes the approvals before execution.
+- Any unavailable identity source, ambiguous human identity, ledger inconsistency, executor credential compromise or audit failure disables exceptional removal. No manual database edit or direct tombstone deletion is an alternate path.
+
+**Additional acceptance tests**
+
+- **C01-61:** requester attempts to act as either approver; reject.
+- **C01-62:** executor identity matches requester or either approver; reject and disable execution.
+- **C01-63:** approver identities are distinct accounts but resolve to the same person; reject.
+- **C01-64:** change canonicalisation version, digest algorithm or any bound field; both approvals become invalid.
+- **C01-65:** interrupt ledger consumption/executor execution at every transaction boundary; no partial approval consumption can authorise a second execution.
+- **C01-66:** restore or fail over the approval ledger; replay protection and one-time consumption remain consistent, otherwise exceptional removal remains disabled.
+
+### 20.4 IC-03-R3 — Numeric ceiling and clock-skew classification (Medium)
+
+The numeric values already present in the contract are classified as follows:
+
+- **Positive membership-cache lifetime:** 30 seconds is a contract-wide hard maximum for a positive membership cache used to admit new protected work. A deployment may choose a lower value. A value above 30 seconds is prohibited under this contract and is not an ordinary deployment exception.
+- **JWT clock skew:** 60 seconds is a provisional baseline default, not a deployment approval and not a universal hard ceiling. The deployment profile must set the actual maximum. A value above 60 seconds requires a documented exception, evidence that the identity provider and hosts maintain reliable time, and independent security approval before enablement.
+- **Clock synchronisation:** each deployment must identify its trusted time source/service, synchronisation method, monitoring and drift alerting. Hosts validating tokens, issuing approvals, writing tombstones and consuming replay-ledger entries must use monitored time. Clock synchronisation loss, unbounded drift or inability to determine trustworthy time fails closed for token acceptance and time-bound exceptional approvals.
+- All other transaction/query/job, revocation, cancellation and termination values remain deployment-owner decisions. No additional numeric defaults are introduced here.
+
+**Additional acceptance tests**
+
+- **C03-10:** attempt to configure positive membership-cache lifetime above 30 seconds; configuration validation rejects it.
+- **C03-11:** configure a value below 30 seconds; runtime enforces the stricter approved value under measured revocation tests.
+- **C03-12:** omit the deployment's JWT clock-skew value or time-synchronisation source; token validation/approval operations remain disabled.
+- **C03-13:** simulate clock drift, time-source outage and disagreement between nodes; expired/not-yet-valid tokens and time-bound approvals fail closed according to the profile.
+- **C03-14:** configure clock skew above 60 seconds without an approved exception record; profile validation rejects it.
+
+### 20.5 IC-05-R2 — Explicit role and credential capacity ceiling (Medium)
+
+The capacity profile must contain separate owner-approved maxima for:
+
+- PostgreSQL login roles, including active, staged and reserved provisioning roles.
+- Active credentials and concurrently valid credential versions during rotation.
+- Retired role identities/tombstones retained for audit and replay prevention.
+- Total cluster-wide roles, including application, migration, monitoring, backup, pooler and emergency administration roles.
+
+The workload model must show how the maximum is calculated, how role/credential headroom is reserved, how rotation overlap is bounded, and what happens at exhaustion. Provisioning must stop with an auditable, fail-closed error before any configured ceiling is exceeded. It must not delete tombstones, recycle an identity, or switch to shared credentials to recover capacity.
+
+**Additional acceptance tests**
+
+- **C05-10:** provision roles/credentials to the approved maximum; the next request is rejected before exceeding it.
+- **C05-11:** perform credential rotation at maximum capacity; overlap is bounded by the approved profile and old credentials are revoked.
+- **C05-12:** exhaust role/credential headroom during tenant/BU provisioning; no partial identity is activated and no tombstone is removed.
+- **C05-13:** restore role catalog and tombstone registry; counts reconcile without reusing retired role identities.
+
+### 20.6 IC-06-R3 — Consistent three-option topology decision (Low)
+
+Sections 8, 19 and the deployment profile must use the same three alternatives:
+
+1. Shared database with scope-bound login roles and RLS.
+2. Separate databases within one PostgreSQL cluster. Roles remain cluster-wide; database separation alone does not create separate role namespaces or separate cluster-administration boundaries.
+3. Separate PostgreSQL clusters or independently administered instances, with distinct cluster-level role namespaces and administration/recovery boundaries.
+
+ADR-PWR-001 must compare all three using the same criteria: authenticated trust boundary, tenant/BU isolation, credential/role scope, network and administrative separation, failure/blast radius, migration, backup/restore, DR, monitoring, connection/pool limits, cross-tenant analytics, operating cost and residual risk. The chosen option and rejected alternatives require named owner approval. The reference recommendation in Section 19 remains a recommendation until signed; it must not be described as an approved topology.
+
+**Additional acceptance tests**
+
+- **C06-07:** validate the ADR and profile enumerate exactly these three alternatives and distinguish cluster-wide roles from database-local objects.
+- **C06-08:** for the selected option, test cross-tenant authentication and access using actual tenant credentials and production-equivalent PostgreSQL privileges.
+- **C06-09:** verify the signed ADR, selected option, profile value and deployed topology are identical; any mismatch blocks the gate.
+
+### 20.7 IC-07-R2 — Consolidated evidence-bundle traceability (Medium)
+
+Every implementation gate must produce one versioned, tamper-evident evidence bundle with a manifest that identifies the exact source and runtime under test. The deployment profile must reference the bundle URI, manifest, integrity/signature record and independent reviewer report.
+
+At minimum the bundle must include:
+
+1. Exact source commit, PR, workflow/run/job IDs, test command, test result and timestamp.
+2. Environment/deployment identity, cluster identity, PostgreSQL product/version/build, relevant server configuration and configuration digest.
+3. Migration IDs, ordered migration history, checksums and resulting schema version.
+4. Role/credential inventory (redacted identifiers only), memberships, effective privileges, ownership, RLS enabled/forced status and policy inventory.
+5. SECURITY DEFINER function definitions, owner attributes, effective grants, search_path and object-privilege evidence.
+6. Actual `session_user`, `current_user`, cluster identity and composite mapping resolution captured from the database during tests.
+7. Executed adversarial SQL/scripts, test source revision, complete logs, exit status and machine-readable results.
+8. Before/after persisted-state assertions for successful, rejected, cancelled, rolled-back and recovery scenarios; include relevant row counts or redacted record identifiers and transaction ordering.
+9. Pooler and HTTP-client exact product/version/configuration, actual socket peer/TLS evidence, DNS and connection-policy observations where those gates apply.
+10. Backup/restore, failover, tombstone-registry and approval-ledger recovery evidence where those gates apply.
+11. Artifact hashes, evidence-generation procedure, storage location/access controls, retention, signing/attestation identity and chain-of-custody metadata.
+12. Known limitations, skipped tests (with reason and gate impact), deviations, residual findings and independent reviewer decision.
+
+A screenshot, summary table, mocked test, lint/type-check result or CI green badge alone is not a runtime evidence bundle. The bundle must be reproducible by an independent reviewer from the recorded source, environment description and instructions. Missing manifest fields, unverifiable hashes/signatures, skipped mandatory tests or absent persisted-state assertions fail the applicable gate.
+
+**Additional acceptance tests**
+
+- **C07-01:** generate a bundle from a completed adversarial run and verify every manifest reference resolves to immutable evidence.
+- **C07-02:** alter an artifact after bundle creation; integrity verification detects the change.
+- **C07-03:** omit a migration checksum, PostgreSQL build/configuration, exact source SHA or persisted-state assertion; bundle validation fails.
+- **C07-04:** mark a mandatory test skipped or mocked; the relevant gate remains blocked.
+- **C07-05:** independently reproduce the recorded test run and compare artifact hashes and persisted-state assertions.
+
+### 20.8 Deployment profile additions and closure status
+
+The companion YAML template must add explicit fields for:
+
+- Cluster identity source/issuer, format, provisioning authority, persistence, clone/restore identity policy and duplicate-active-instance prevention.
+- Tombstone registry authority, consistency/sequence model, backup integrity and restore reconciliation.
+- Canonical approval serialization version and digest algorithm; requester, approver and executor separation; approval-ledger authority, consistency and recovery.
+- JWT clock-skew value, trusted time source, synchronisation method, monitoring, drift alerting and failure policy.
+- Maximum PostgreSQL role count, active credential count, rotation overlap and retained tombstone count.
+- Three-option topology comparison and signed ADR evidence.
+- Consolidated IC-07 evidence bundle URI, manifest URI, signature/integrity record, PostgreSQL build/configuration, migration checksums and persisted-state evidence.
+
+**Updated status:** IC-01-R5 through R7, IC-03-R3, IC-05-R2, IC-06-R3 and IC-07-R2 are addressed at contract/profile specification level only. All corresponding implementation, owner approval and runtime evidence remain outstanding. Gate 0 remains OPEN. No production deployment, customer production data, certification, SCADA/DMS connectivity or operational control is authorised.
+
+**Release boundary:** This section is a documentation, profile and acceptance-test refinement only. It does not certify implementation, approve numerical deployment values, select the customer's topology, close Gate 0, authorise merge or permit deployment.

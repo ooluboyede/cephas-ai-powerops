@@ -178,6 +178,8 @@ ic_01_identity_approval_and_fencing:
   retirement_fence_synchronous_quorum_acknowledgement_evidence_uri: null
   retirement_fence_synchronous_commit_negative_test_evidence_uri: null
   retirement_fence_synchronous_commit_wrapper_conformance_evidence_uri: null
+  retirement_fence_fsync_setting: null # Native PostgreSQL: must be on
+  retirement_fence_storage_flush_durability_evidence_uri: null
   retirement_fence_eligible_promotion_candidates: []
   retirement_fence_failover_controller_product_version: null
   retirement_fence_former_primary_write_fencing_method: null

@@ -238,7 +238,7 @@ role_credential_capacity:
   exhaustion_test_evidence_uri: null
 
 # IC-06-R3 — the ADR must compare all three alternatives
- topology_decision_comparison:
+topology_decision_comparison:
   options_required:
     - "shared_database_scope_bound_roles_rls"
     - "separate_databases_within_one_postgresql_cluster"

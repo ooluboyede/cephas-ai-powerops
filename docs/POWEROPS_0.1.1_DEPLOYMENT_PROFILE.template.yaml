@@ -116,7 +116,14 @@ ic_04_endpoint_security:
   proxy_version: null
   proxy_upstream_evidence_format: null
   proxy_evidence_retention_days: null
-  allowed_issuer_hosts: []
+  # Exact normalized HTTPS origins (scheme, hostname, effective port); no implicit wildcard.
+  allowed_discovery_origins: []
+  allowed_jwks_origins: []
+  discovery_issuer_binding_policy_uri: null
+  discovery_jwks_uri_origin_validation_evidence_uri: null
+  discovery_and_jwks_redirect_policy_uri: null
+  discovery_origin_rejection_test_evidence_uri: null
+  jwks_origin_rejection_test_evidence_uri: null
   prohibited_destination_policy_uri: null
   actual_socket_peer_test_evidence_uri: null
   tls_identity_test_evidence_uri: null
@@ -144,6 +151,18 @@ ic_01_identity_approval_and_fencing:
   approval_consumption_failover_semantics: null
   retirement_fence_authority: null
   retirement_fence_consistency_model: null
+  retirement_fence_lock_protocol: null # PostgreSQL transaction-scoped row lock on authoritative composite fence row
+  retirement_fence_lock_sql_or_implementation_reference: null
+  retirement_fence_transaction_isolation_level: null
+  retirement_fence_lock_ordering_rule: null
+  retirement_fence_lock_timeout_seconds: null
+  retirement_fence_deadlock_policy: null
+  retirement_fence_retry_limit: null
+  retirement_fence_failover_durability_semantics: null
+  retirement_fence_ambiguous_commit_recovery_procedure_uri: null
+  retirement_fence_primary_authority_and_replica_policy: null
+  retirement_fence_concurrency_evidence_c01_49_65_uri: null
+  exact_postgres_build_lock_protocol_evidence_uri: null
   fence_authority_outage_policy: "deny_new_protected_work"
   tombstone_writer_workload_identity: null
   tombstone_reconciler_workload_identity: null
@@ -246,11 +265,16 @@ ic_03_clock_synchronisation:
 
 # IC-05-R2 — explicit database role and credential ceilings
 role_credential_capacity:
-  max_postgres_roles_total: null
+  # Login/scope-bound roles are also included in the cluster-wide total.
+  max_scope_bound_login_roles: null
+  max_postgres_roles_total_cluster_wide: null
   max_active_credentials: null
   max_concurrent_credential_versions_during_rotation: null
   max_retained_retired_role_tombstones: null
+  fixed_platform_and_service_role_reserve: null
   role_inventory_includes_migration_monitoring_backup_pooler_emergency: true
+  scope_role_count_reconciliation_evidence_uri: null
+  total_cluster_role_count_reconciliation_evidence_uri: null
   capacity_calculation_evidence_uri: null
   exhaustion_test_evidence_uri: null
 

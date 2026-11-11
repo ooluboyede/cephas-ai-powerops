@@ -1032,3 +1032,73 @@ The companion YAML template must add explicit fields for:
 
 
 **Additional IC-07-R2 profile validation fields:** The profile's evidence section must separately reference SECURITY DEFINER definitions/owners/EXECUTE grants, effective role privileges, forced/enabled RLS policy inventory, actual `session_user`/cluster identity/scope resolution, persisted-state assertions, and signature/key verification tests. A generic evidence URI does not replace these typed references.
+
+
+## 21. Final specification refinements — IC-01-R8, IC-05-R3 and IC-04-R5
+
+This section resolves the three additional findings from the final independent re-review. These are specification and profile changes only. They do not assert that any PostgreSQL lock protocol, role-capacity enforcement or OIDC endpoint validation has been implemented.
+
+### 21.1 IC-01-R8 — Retirement-fence lock protocol and operating parameters (Medium)
+
+The deployment profile must select and record a PostgreSQL-specific lock protocol for the exact PostgreSQL product, major/minor build, topology and transaction path. A generic statement that a row lock is used is insufficient.
+
+**Required protocol**
+1. Use a durable authoritative fence row keyed by (cluster_identity, role_oid). The row contains lifecycle state and a monotonically increasing generation. The row must exist before a scope-bound identity can admit protected work.
+2. The reference PostgreSQL protocol is a transaction-scoped row lock using SELECT FOR UPDATE on that exact fence row. Admission locks and validates the row, confirms active state and the current generation, and performs protected SQL in the same database transaction while retaining the lock until commit or rollback.
+3. Retirement uses the same row and conflicting lock. It waits for any already-admitted protected transaction, then writes retirement intent and increments the generation in the same transaction before acknowledging the durable fence. No later admission can pass the row-state/generation check.
+4. All code paths must use one documented lock order. When multiple identities are involved, acquire locks in a deterministic ascending order on (cluster_identity, role_oid); never introduce a reverse-order path. If an operation cannot obey the common order, it must be split or rejected.
+5. The deployment owner must approve the transaction isolation level. The implementation must document why the chosen level preserves the stated ordering, and must not rely on a stale snapshot or replica read for fence admission. Serialization failures, deadlocks, lock timeouts and connection loss cause the whole admission/fence transaction to abort and be retried only under a bounded, idempotent policy.
+6. The profile must state the finite lock-acquisition timeout, deadlock retry policy and retry ceiling. No numeric value is implied by this contract; values require deployment-owner approval and load/concurrency evidence.
+7. Failover must use a topology that preserves committed fence state before a new primary admits protected work. A promotion with uncertain WAL durability, stale replica state or split-brain risk keeps protected work disabled until recovery/reconciliation proves the authoritative generation. Do not use asynchronous replicas as admission authorities.
+8. On an ambiguous commit (client disconnect/timeout after COMMIT), the caller must not assume success or failure. It must query the authoritative primary using the idempotency/request ID and fence generation. Until outcome is resolved, deny new admission for that request/identity as applicable. Reconciliation must never roll back a committed retirement or decrement a generation.
+9. Runtime evidence must identify the exact PostgreSQL build, isolation level, lock SQL/protocol, lock order, timeout/retry configuration and failover mode. C01-49–54 must be run against that exact build/topology; extend the evidence with actual lock wait graph/transaction ordering, commit outcome and persisted fence generation.
+
+**Additional acceptance tests**
+- **C01-61:** inspect every admission and retirement path; verify all acquire the same authoritative row lock and use the documented deterministic lock order.
+- **C01-62:** run concurrent admission/retirement races under the approved isolation level; capture database transaction order and prove no protected transaction starts after retirement commits.
+- **C01-63:** force lock timeout, deadlock and serialization failure; verify complete rollback, bounded retry, idempotency and fail-closed behavior.
+- **C01-64:** fail over during admission and retirement, including a lost commit acknowledgement; verify promotion cannot serve protected work until committed fence state is proven and ambiguous outcomes are reconciled without generation rollback.
+- **C01-65:** deliberately configure an unapproved isolation level, missing lock timeout, reverse lock order or asynchronous admission read; profile validation or runtime startup rejects the configuration.
+
+### 21.2 IC-05-R3 — Separate PostgreSQL role ceilings (Medium)
+
+The deployment profile must distinguish **scope-bound/login roles** from the **total cluster-wide PostgreSQL role inventory**. These are separate ceilings and must not be represented by one aggregate number.
+
+The approved capacity profile must contain independent owner-approved numeric maxima for:
+- Scope-bound/login roles, including active, staged and reserved roles needed for provisioning and rotation.
+- Total cluster-wide roles across every database in the cluster, including application, migration, administrative, monitoring, backup, pooler, emergency and service roles.
+- Active credentials.
+- Concurrently valid credential versions during rotation overlap.
+- Retained retired-role tombstones.
+
+The workload calculation must show how scope-bound roles fit within the total cluster-wide role budget, including fixed platform/service roles and operational reserve. It must define alert thresholds, provisioning admission control, safe exhaustion behavior and the evidence used to reconcile catalog counts with the deployment inventory. A scope-bound/login role is also counted in the total cluster-wide role ceiling; do not double-count it when computing the total, but do include it in both relevant limit checks.
+
+At any ceiling, provisioning and rotation fail closed before a PostgreSQL role or credential is created beyond the approved limit. Never delete tombstones, recycle retired identities, silently raise a ceiling or fall back to shared credentials. Capacity exhaustion must not leave a partially active identity.
+
+**Additional acceptance tests**
+- **C05-14:** fill the scope-bound/login-role budget while total cluster role capacity remains; the next scope provisioning request is rejected before creating a role.
+- **C05-15:** fill the total cluster-wide role budget using a mixture of application and service roles; further role creation is rejected even if the login-role sub-budget has headroom.
+- **C05-16:** verify every scope-bound/login role is included in the total cluster-wide count and each role is counted once in aggregate reconciliation.
+- **C05-17:** exhaust active-credential, rotation-overlap and tombstone-retention limits independently; each produces its own auditable fail-closed result without partial activation or tombstone deletion.
+
+### 21.3 IC-04-R5 — Separate discovery and JWKS origin allowlists (Low)
+
+The deployment profile must define two distinct, typed origin allowlists:
+- allowed_discovery_origins: exact approved HTTPS origins for OIDC discovery-document retrieval.
+- allowed_jwks_origins: exact approved HTTPS origins for JWKS retrieval.
+
+An origin is the normalized scheme, hostname and effective port. Wildcard hosts, user-info, non-HTTPS schemes, unapproved ports and ambiguous URL normalization are prohibited unless an explicit separately reviewed exception authorises them. Host allowlisting alone is not sufficient if it omits scheme/port or permits arbitrary paths/redirect destinations.
+
+The configured discovery URL must be bound to the approved issuer/provider profile. The retrieved discovery document's issuer must exactly match the configured issuer, and its advertised jwks_uri must be parsed and normalized, then checked against allowed_jwks_origins and the prohibited-destination policy before any connection is made. Do not accept a token-supplied jku, x5u, issuer, discovery URL or JWKS URL as a trust input.
+
+The HTTP client must apply the existing DNS-to-socket binding, TLS hostname/SNI, redirect, proxy, address-class and connection-pool rules independently to both discovery and JWKS fetches. Redirects remain disabled by default; any approved redirect must be revalidated against the relevant allowlist at every hop. Discovery and JWKS origins must be independently auditable and revocable.
+
+**Additional acceptance tests**
+- **C04-18:** retrieve discovery metadata from an approved discovery origin whose advertised jwks_uri points to an unapproved origin; reject before opening a JWKS connection.
+- **C04-19:** approve a discovery origin but omit its JWKS origin; discovery may be retrieved, but key retrieval and token validation fail closed.
+- **C04-20:** approve a JWKS origin but not the discovery origin; discovery retrieval is rejected.
+- **C04-21:** test scheme, port, hostname normalization, user-info, wildcard, redirect, CNAME, IPv4/IPv6 and prohibited-address bypass attempts against both allowlists.
+- **C04-22:** change or revoke one allowlist independently; cached discovery/JWKS metadata and pooled connections are invalidated within the approved policy bound.
+- **C04-23:** supply token-directed jku/x5u or altered discovery metadata; no unapproved network request occurs and validation fails closed.
+
+**Updated status:** IC-01-R8, IC-05-R3 and IC-04-R5 are addressed at contract/profile specification level only. Exact PostgreSQL lock parameters, role/credential limits, endpoint origins, runtime implementation and all related adversarial evidence remain deployment- or implementation-specific. Gate 0 remains OPEN. This section does not approve numeric values, select topology, certify implementation, authorise merge or permit deployment.

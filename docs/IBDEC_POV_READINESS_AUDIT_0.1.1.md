@@ -98,3 +98,28 @@ Complete P0: inventory all active branches and open PRs, compare their exact hea
 ## 8. Release decision
 
 **No IBDEC customer installation, operational data connection, or PoV start is authorised by this audit.** This document is a readiness assessment, not a security certification, customer approval, production approval, or licence issuance.
+
+
+## 9. Follow-up inventory of active Git branches and open pull requests
+
+The GitHub repository branch listing and open-PR listing were inspected on 2026-11-11.
+
+| Branch | Exact head | Tree-level finding |
+|---|---|---|
+| `docs/0.1.1-gate-0-owner-decision-register` | `d2c20ebdfe2d589916cc40821f3c8bd71e8e3f5b` | Gate 0 owner register, IBDEC deployment profile and technical decision-session documentation; application implementation remains the foundation scaffold |
+| `docs/0.1.1-implementation-contract` | `b63a341695960c93ae1f80479a9c9eaa2eaed312` | Specification/documentation branch |
+| `docs/0.1.1-implementation-contract-conditions` | `1671057a7633a50046af0722e7e2db2f61496662` | PR #5 exact head; specification/acceptance-contract work, not runtime implementation |
+| `feat/0.1.0-platform-foundation` | `258d6f963aa7cca518800d196c40f3f6fdf22943` | Same small FastAPI foundation, config and two tests |
+| `feat/0.1.1-identity-tenant-rls` | `1cc39dcc5a7f3c355f4f230b6eeafd46ae018348` | Adds `docs/IDENTITY_TENANT_RLS_0.1.1.md`; tree contains no identity, database, PostgreSQL RLS or tenant-context runtime modules |
+| `fix/0.1.0-review-remediation` | `e863db8d78ae1bb4f1279a69bbd5fdef8ae38043` | Foundation scaffold and documentation; no additional runtime modules in tree |
+| `main` | `0b91b24a58b3e276610ab01f5d37535c02c8c27c` | README only at this branch head |
+| `pov/ibdec-readiness-audit` | `b47c2c35121a47e3f2a45dc480283cf6bb8b09bd` | This isolated audit branch, created from the approved specification baseline |
+
+Only one open pull request was returned: **PR #5**, open, draft and unmerged, with head `1671057a7633a50046af0722e7e2db2f61496662`. Its body explicitly states that the PR is documentation and acceptance-test specification only and that runtime implementation for IC-01 through IC-07 remains outstanding.
+
+### P0 conclusion
+
+The inspected active branches do not reveal a more complete operational application or PoV-ready runtime. The identity/tenant/RLS branch is documentation-only at its inspected head. Therefore the earlier foundation-only conclusion is reinforced by the active-branch inventory, not merely inferred from the specification-approved commit.
+
+This is a tree-level inventory, not a full source-code security audit of every historical commit. Before selecting code for reuse, inspect the full diff/history and exact CI evidence for any branch that is subsequently advanced.
+

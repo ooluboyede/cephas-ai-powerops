@@ -1094,11 +1094,11 @@ The configured discovery URL must be bound to the approved issuer/provider profi
 The HTTP client must apply the existing DNS-to-socket binding, TLS hostname/SNI, redirect, proxy, address-class and connection-pool rules independently to both discovery and JWKS fetches. Redirects remain disabled by default; any approved redirect must be revalidated against the relevant allowlist at every hop. Discovery and JWKS origins must be independently auditable and revocable.
 
 **Additional acceptance tests**
-- **C04-28:** retrieve discovery metadata from an approved discovery origin whose advertised jwks_uri points to an unapproved origin; reject before opening a JWKS connection.
-- **C04-29:** approve a discovery origin but omit its JWKS origin; discovery may be retrieved, but key retrieval and token validation fail closed.
-- **C04-30:** approve a JWKS origin but not the discovery origin; discovery retrieval is rejected.
-- **C04-31:** test scheme, port, hostname normalization, user-info, wildcard, redirect, CNAME, IPv4/IPv6 and prohibited-address bypass attempts against both allowlists.
-- **C04-32:** change or revoke one allowlist independently; cached discovery/JWKS metadata and pooled connections are invalidated within the approved policy bound.
-- **C04-33:** supply token-directed jku/x5u or altered discovery metadata; no unapproved network request occurs and validation fails closed.
+- **C04-35:** retrieve discovery metadata from an approved discovery origin whose advertised jwks_uri points to an unapproved origin; reject before opening a JWKS connection.
+- **C04-36:** approve a discovery origin but omit its JWKS origin; discovery may be retrieved, but key retrieval and token validation fail closed.
+- **C04-37:** approve a JWKS origin but not the discovery origin; discovery retrieval is rejected.
+- **C04-38:** test scheme, port, hostname normalization, user-info, wildcard, redirect, CNAME, IPv4/IPv6 and prohibited-address bypass attempts against both allowlists.
+- **C04-39:** change or revoke one allowlist independently; cached discovery/JWKS metadata and pooled connections are invalidated within the approved policy bound.
+- **C04-40:** supply token-directed jku/x5u or altered discovery metadata; no unapproved network request occurs and validation fails closed.
 
 **Updated status:** IC-01-R8, IC-05-R3 and IC-04-R5 are addressed at contract/profile specification level only. Exact PostgreSQL lock parameters, role/credential limits, endpoint origins, runtime implementation and all related adversarial evidence remain deployment- or implementation-specific. Gate 0 remains OPEN. This section does not approve numeric values, select topology, certify implementation, authorise merge or permit deployment.

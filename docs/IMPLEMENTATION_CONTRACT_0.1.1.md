@@ -895,9 +895,9 @@ The deployment profile must define:
 - How a new cluster, cloned image, point-in-time restore, standby promotion and disaster-recovery restore obtain or retain a cluster identity.
 - A clone must never become active with a duplicated identity. It remains isolated from protected traffic until a unique identity is issued or an explicitly authorised original-identity recovery is completed.
 - A restored replacement may retain the original identity only after the former instance is demonstrably fenced from service and split-brain/duplicate-active operation is prevented. Otherwise it receives a new identity and undergoes controlled mapping/tombstone reconciliation.
-- The tombstone registry's authoritative owner, writer, consistency/commit semantics, sequence authority, append-only/integrity controls, independent backup and restore process.
+- The tombstone registry's authoritative identity/product or service, owner, writer, consistency/commit semantics, sequence authority, stated recovery-point objective (RPO), append-only/integrity controls, independent backup and restore process.
 - The recovery procedure for registry loss, rollback, incomplete event sequence, duplicate cluster identity and disagreement between registry and PostgreSQL catalog. Conflicts disable protected work pending authorised reconciliation.
-- Registry authority and cluster-local mapping authority must be distinguished. The registry key is always composite `(cluster_identity, role_oid)`; a cluster-local mapping store may use `role_oid` only when its containing cluster identity is cryptographically/administratively bound and verified at runtime.
+- Registry authority and mapping-store mode must be explicit: `cluster_local` or `central`. The registry key is always composite `(cluster_identity, role_oid)`. A cluster-local mapping store may use `role_oid` only when its containing cluster identity is cryptographically/administratively bound and verified at runtime. A central mapping store must use the composite key and verify the cluster identity on every lookup; it must not infer cluster identity from a caller-supplied value.
 
 **Additional acceptance tests**
 
@@ -914,6 +914,7 @@ Extend the exceptional-removal protocol so that:
 - The requester, each of the two approvers, and the execution workload identity are four distinct principals/roles. The executor is a dedicated non-human workload identity and cannot be the requester or either approver.
 - The two approvers are distinct verified natural persons, not merely distinct accounts. Both are independently authorised for the exact target environment and action.
 - The canonical approval digest covers a versioned canonicalisation scheme, digest algorithm, request ID/nonce, cluster identity, role OID, tombstone event/sequence, reason, requester, target environment, policy version, creation/expiry, and action. Any field change invalidates both approvals.
+- The deployment profile must define the approval trust/verification profile, permitted signature algorithms and key types, approver authentication assurance level, authoritative human identity proofing, key custody/rotation/revocation and verifier policy. A valid signature under an unapproved algorithm/key or an approval below the required authentication assurance is rejected.
 - Approval verification and one-time consumption are atomic in the approved strongly consistent ledger. The ledger's product/authority, consistency model, durability, backup/recovery, retention, replay handling and audit evidence are deployment-profile decisions.
 - The executor re-fetches the canonical request and both approval records from the authoritative ledger, independently verifies signatures, identities, distinct-person status, role separation, expiry, revocation, policy and current tombstone state, and atomically consumes the approvals before execution.
 - Any unavailable identity source, ambiguous human identity, ledger inconsistency, executor credential compromise or audit failure disables exceptional removal. No manual database edit or direct tombstone deletion is an alternate path.
@@ -926,13 +927,18 @@ Extend the exceptional-removal protocol so that:
 - **C01-64:** change canonicalisation version, digest algorithm or any bound field; both approvals become invalid.
 - **C01-65:** interrupt ledger consumption/executor execution at every transaction boundary; no partial approval consumption can authorise a second execution.
 - **C01-66:** restore or fail over the approval ledger; replay protection and one-time consumption remain consistent, otherwise exceptional removal remains disabled.
+- **C01-67:** rotate an approval signing key; only the configured overlap/active key policy is accepted and retired keys cannot authorise new approvals.
+- **C01-68:** revoke a signing key while approvals are pending; executor rejects approvals signed by the revoked key according to the approved revocation policy.
+- **C01-69:** submit an unapproved signature algorithm, key type or key; verification rejects it.
+- **C01-70:** submit an approval with authentication assurance below the configured minimum; executor rejects it.
+- **C01-71:** race two executions against the same pair of approvals; the ledger permits exactly one atomic consumption and one execution.
 
 ### 20.4 IC-03-R3 — Numeric ceiling and clock-skew classification (Medium)
 
 The numeric values already present in the contract are classified as follows:
 
-- **Positive membership-cache lifetime:** 30 seconds is a contract-wide hard maximum for a positive membership cache used to admit new protected work. A deployment may choose a lower value. A value above 30 seconds is prohibited under this contract and is not an ordinary deployment exception.
-- **JWT clock skew:** 60 seconds is a provisional baseline default, not a deployment approval and not a universal hard ceiling. The deployment profile must set the actual maximum. A value above 60 seconds requires a documented exception, evidence that the identity provider and hosts maintain reliable time, and independent security approval before enablement.
+- **Positive membership-cache lifetime:** 30 seconds is a contract-wide hard maximum for a positive membership cache used to admit new protected work. This bounds the exposure window from stale positive membership data; it does not replace the immediate retirement-fence protocol or terminate already-admitted work. A deployment may choose a lower value, and the runtime/profile validator must enforce that lower approved value. A value above 30 seconds is prohibited under this contract and is not an ordinary deployment exception.
+- **JWT clock skew:** 60 seconds is a provisional baseline default, not a deployment approval and not a universal hard ceiling. It is a compatibility starting point for bounded clock differences, not permission to tolerate unsynchronised hosts. The deployment profile must set the actual maximum. A value above 60 seconds requires a documented exception, evidence that the identity provider and hosts maintain reliable time, and independent security approval before enablement.
 - **Clock synchronisation:** each deployment must identify its trusted time source/service, synchronisation method, monitoring and drift alerting. Hosts validating tokens, issuing approvals, writing tombstones and consuming replay-ledger entries must use monitored time. Clock synchronisation loss, unbounded drift or inability to determine trustworthy time fails closed for token acceptance and time-bound exceptional approvals.
 - All other transaction/query/job, revocation, cancellation and termination values remain deployment-owner decisions. No additional numeric defaults are introduced here.
 
@@ -1012,13 +1018,17 @@ A screenshot, summary table, mocked test, lint/type-check result or CI green bad
 The companion YAML template must add explicit fields for:
 
 - Cluster identity source/issuer, format, provisioning authority, persistence, clone/restore identity policy and duplicate-active-instance prevention.
-- Tombstone registry authority, consistency/sequence model, backup integrity and restore reconciliation.
-- Canonical approval serialization version and digest algorithm; requester, approver and executor separation; approval-ledger authority, consistency and recovery.
+- Mapping-store mode (`cluster_local` or `central`) and cluster-identity binding/verification method.
+- Tombstone registry product/service identity, authority, consistency/sequence model, approved RPO, backup integrity and restore reconciliation.
+- Canonical approval serialization version and digest algorithm; approval trust/verification profile, permitted algorithms/key types, minimum approver authentication assurance; requester, approver and executor separation; approval-ledger authority, consistency and recovery; signing-key rotation/revocation test evidence.
 - JWT clock-skew value, trusted time source, synchronisation method, monitoring, drift alerting and failure policy.
 - Maximum PostgreSQL role count, active credential count, rotation overlap and retained tombstone count.
 - Three-option topology comparison and signed ADR evidence.
-- Consolidated IC-07 evidence bundle URI, manifest URI, signature/integrity record, PostgreSQL build/configuration, migration checksums and persisted-state evidence.
+- Consolidated IC-07 evidence bundle URI, manifest URI, signature/integrity record, PostgreSQL build/configuration, migration checksums, effective privilege inventory, SECURITY DEFINER definitions/grants, RLS policy inventory, actual database identity/scope evidence and persisted-state assertions.
 
 **Updated status:** IC-01-R5 through R7, IC-03-R3, IC-05-R2, IC-06-R3 and IC-07-R2 are addressed at contract/profile specification level only. All corresponding implementation, owner approval and runtime evidence remain outstanding. Gate 0 remains OPEN. No production deployment, customer production data, certification, SCADA/DMS connectivity or operational control is authorised.
 
 **Release boundary:** This section is a documentation, profile and acceptance-test refinement only. It does not certify implementation, approve numerical deployment values, select the customer's topology, close Gate 0, authorise merge or permit deployment.
+
+
+**Additional IC-07-R2 profile validation fields:** The profile's evidence section must separately reference SECURITY DEFINER definitions/owners/EXECUTE grants, effective role privileges, forced/enabled RLS policy inventory, actual `session_user`/cluster identity/scope resolution, persisted-state assertions, and signature/key verification tests. A generic evidence URI does not replace these typed references.

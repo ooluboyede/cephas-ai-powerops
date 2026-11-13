@@ -49,8 +49,5 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
 
-      - name: Run Gate 1E baseline
-        run: bash tests/postgresql/run_gate1e.sh
-
-      - name: Run Gate 1F adversarial extension
+      - name: Run Gate 1E baseline and Gate 1F adversarial extension
         run: bash tests/postgresql/run_gate1f.sh

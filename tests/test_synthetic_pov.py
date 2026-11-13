@@ -68,3 +68,37 @@ def test_generator_rejects_unbounded_fixture_dimensions() -> None:
         generate_synthetic_pov_dataset(transformers_per_feeder=11)
     with pytest.raises(ValueError):
         generate_synthetic_pov_dataset(days=91)
+
+
+def test_loading_risk_rejects_non_finite_values() -> None:
+    import math
+
+    import pytest
+
+    for value in (math.nan, math.inf, -math.inf, -0.1):
+        with pytest.raises(ValueError):
+            classify_loading_risk(value)
+
+
+def test_outage_timestamps_and_durations_are_consistent() -> None:
+    from datetime import datetime
+
+    dataset = generate_synthetic_pov_dataset(seed=23)
+    reference_time = datetime.fromisoformat(dataset.reference_time)
+    for outage in dataset.outages:
+        started = datetime.fromisoformat(outage.started_at)
+        restored = datetime.fromisoformat(outage.restored_at)
+        assert restored > started
+        assert restored <= reference_time
+        assert int((restored - started).total_seconds() / 60) == (
+            outage.duration_minutes
+        )
+
+
+def test_energy_reconciliation_never_exceeds_input() -> None:
+    dataset = generate_synthetic_pov_dataset(seed=29)
+    for record in dataset.energy_reconciliation:
+        assert record.energy_input_mwh > 0
+        assert record.billed_energy_mwh >= 0
+        assert record.billed_energy_mwh <= record.energy_input_mwh
+        assert record.unreconciled_gap_mwh >= 0

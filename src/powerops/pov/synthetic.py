@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
+from math import isfinite
 from random import Random
 from typing import Final, Literal
 
@@ -99,8 +100,8 @@ class SyntheticPoVDataset:
 
 def classify_loading_risk(loading_pct: float) -> RiskLevel:
     """Classify a loading indicator, not the physical health or fault state."""
-    if loading_pct < 0:
-        raise ValueError("loading_pct must be non-negative")
+    if not isfinite(loading_pct) or loading_pct < 0:
+        raise ValueError("loading_pct must be finite and non-negative")
     if loading_pct > 100:
         return "high"
     if loading_pct >= 85:

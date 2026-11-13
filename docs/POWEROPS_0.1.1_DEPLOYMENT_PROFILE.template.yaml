@@ -19,15 +19,15 @@ architecture:
   cross_customer_shared_runtime: false
   cross_customer_shared_runtime_status: "PROHIBITED_FOR_INITIAL_REFERENCE_MODEL"
   postgres_topology: "dedicated_cluster_or_independently_administered_instance_per_customer"
-  postgres_topology_status: "RECOMMENDED_NOT_APPROVED"
+  postgres_topology_status: "OWNER_APPROVED_REFERENCE_DEFAULT; CUSTOMER_DEPLOYMENT_APPROVAL_REQUIRED"
   postgres_version: null
   database_names_and_boundaries: []
   tenant_and_business_unit_isolation: "scope_bound_database_identity_plus_rls"
   separate_staging_and_production: true
   staging_production_separation_evidence: null
   adr_id: "ADR-PWR-001"
-  adr_approval_status: "UNAPPROVED"
-  adr_approval_record: null
+  adr_approval_status: "OWNER_APPROVED_REFERENCE_DEFAULT; CUSTOMER_DEPLOYMENT_APPROVAL_REQUIRED"
+  adr_approval_record: "docs/ADR-PWR-001-DEDICATED-POSTGRESQL-PER-CUSTOMER.md (owner approval recorded 2026-11-13)"
 
 capacity:
   tenant_count: null
@@ -86,8 +86,8 @@ ic_05_database_and_pooler:
   approval_record: null
 
 ic_06_topology:
-  selected_option: null # shared_db_rls | separate_databases_one_cluster | separate_clusters_or_instances
-  selected_option_status: "UNAPPROVED"
+  selected_option: "separate_clusters_or_instances" # shared_db_rls | separate_databases_one_cluster | separate_clusters_or_instances
+  selected_option_status: "OWNER_APPROVED_REFERENCE_DEFAULT; CUSTOMER_DEPLOYMENT_APPROVAL_REQUIRED"
   threat_model_uri: null
   rejected_alternatives_and_rationale_uri: null
   migration_and_rollback_evidence_uri: null

@@ -71,20 +71,6 @@ ALTER ROLE pwr_gate1e_tenant_b PASSWORD 'Gate1E-Disposable-Only-ChangeMe';
 SQL
 
 echo "[Gate 1E] Assert tenant and BU visibility using real login connections"
-assert_visible_count() {
-  local role="$1" expected="$2"
-  psql_role "$role" -v expected="$expected" <<'SQL'
-DO $$
-DECLARE n bigint;
-BEGIN
-  SELECT count(*) INTO n FROM powerops_data.feeders;
-  IF n <> :'expected'::bigint THEN
-    RAISE EXCEPTION 'visibility mismatch: expected %, received %', :'expected', n;
-  END IF;
-END
-$$;
-SQL
-}
 # psql variables are not interpolated inside dollar-quoted DO blocks; use a
 # literal-safe SQL assertion generated from a validated numeric expected value.
 assert_count() {

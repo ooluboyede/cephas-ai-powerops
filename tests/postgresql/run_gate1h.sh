@@ -56,7 +56,7 @@ PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -qAt \
   <"$SESSION_INPUT" >"$SESSION_OUTPUT" 2>"$SESSION_ERROR" &
 SESSION_CLIENT_PID=$!
 exec 3>"$SESSION_INPUT"
-printf 'SELECT pg_backend_pid();\\n' >&3
+printf '%s\n' 'SELECT pg_backend_pid();' >&3
 
 for _ in $(seq 1 50); do
   if [[ -s "$SESSION_OUTPUT" ]]; then
@@ -82,7 +82,10 @@ psql_admin -v pid="$SESSION_PID" -Atc \
 
 # These statements are sent through the SAME already-authenticated connection.
 # psql continues after the expected SQL error because ON_ERROR_STOP is not set.
-printf 'SELECT * FROM powerops_security.resolve_authenticated_scope();\\nSELECT \\\'SCOPE_CHECK_DONE\\\';\\nSELECT \\\'SESSION_ALIVE:\\' || pg_backend_pid();\\n' >&3
+printf '%s\n' \
+  'SELECT * FROM powerops_security.resolve_authenticated_scope();' \
+  "SELECT 'SCOPE_CHECK_DONE';" \
+  "SELECT 'SESSION_ALIVE:' || pg_backend_pid();" >&3
 for _ in $(seq 1 50); do
   grep -q 'SCOPE_CHECK_DONE' "$SESSION_OUTPUT" && break
   sleep 0.2

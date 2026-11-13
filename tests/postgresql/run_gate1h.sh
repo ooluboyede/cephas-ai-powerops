@@ -25,6 +25,8 @@ SESSION_PID=""
 SESSION_CLIENT_PID=""
 SESSION_OUTPUT="$(mktemp)"
 SESSION_ERROR="$(mktemp)"
+SESSION_INPUT="$(mktemp -u)"
+mkfifo "$SESSION_INPUT"
 cleanup() {
   if [[ -n "$SESSION_PID" ]]; then
     psql_admin -Atc "SELECT pg_terminate_backend($SESSION_PID) WHERE EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid=$SESSION_PID)" >/dev/null 2>&1 || true
@@ -33,7 +35,7 @@ cleanup() {
     kill "$SESSION_CLIENT_PID" >/dev/null 2>&1 || true
     wait "$SESSION_CLIENT_PID" >/dev/null 2>&1 || true
   fi
-  rm -f "$SESSION_OUTPUT" "$SESSION_ERROR"
+  rm -f "$SESSION_OUTPUT" "$SESSION_ERROR" "$SESSION_INPUT"
 }
 trap cleanup EXIT
 
@@ -51,9 +53,10 @@ SQL
 echo "[Gate 1H] Open and hold a real authenticated PostgreSQL session"
 PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -qAt \
   -h "$PGHOST" -p "$PGPORT" -U "$SESSION_ROLE" -d "$PGDATABASE" \
-  -c 'SELECT pg_backend_pid(); SELECT pg_sleep(300);' \
-  >"$SESSION_OUTPUT" 2>"$SESSION_ERROR" &
+  <"$SESSION_INPUT" >"$SESSION_OUTPUT" 2>"$SESSION_ERROR" &
 SESSION_CLIENT_PID=$!
+exec 3>"$SESSION_INPUT"
+printf 'SELECT pg_backend_pid();\\n' >&3
 
 for _ in $(seq 1 50); do
   if [[ -s "$SESSION_OUTPUT" ]]; then
@@ -71,16 +74,34 @@ psql_admin -v pid="$SESSION_PID" -Atc \
   "SELECT 1 FROM pg_stat_activity WHERE pid=:'pid'::int AND usename='pwr_gate1h_session'" \
   | grep -qx '1'
 
-echo "[Gate 1H] Retire login; prove existing backend survives NOLOGIN but scope resolution fails"
+echo "[Gate 1H] Retire login; existing backend remains connected but scope resolution fails"
 psql_admin -c "SELECT powerops_security.retire_scope_login('pwr_gate1h_session','Gate 1H active session fencing test');"
 psql_admin -v pid="$SESSION_PID" -Atc \
   "SELECT 1 FROM pg_stat_activity WHERE pid=:'pid'::int AND usename='pwr_gate1h_session'" \
   | grep -qx '1'
 
-if psql_role "$SESSION_ROLE" -c 'SELECT * FROM powerops_security.resolve_authenticated_scope()' >/dev/null 2>&1; then
-  echo "Retired pre-existing session unexpectedly resolved an active scope" >&2
+# These statements are sent through the SAME already-authenticated connection.
+# psql continues after the expected SQL error because ON_ERROR_STOP is not set.
+printf 'SELECT * FROM powerops_security.resolve_authenticated_scope();\\nSELECT \\\'SCOPE_CHECK_DONE\\\';\\nSELECT \\\'SESSION_ALIVE:\\' || pg_backend_pid();\\n' >&3
+for _ in $(seq 1 50); do
+  grep -q 'SCOPE_CHECK_DONE' "$SESSION_OUTPUT" && break
+  sleep 0.2
+done
+grep -q 'SCOPE_CHECK_DONE' "$SESSION_OUTPUT" || {
+  echo "Existing session did not complete the post-retirement scope check" >&2
+  cat "$SESSION_ERROR" >&2
   exit 1
-fi
+}
+grep -q 'authenticated database identity is retired' "$SESSION_ERROR" || {
+  echo "Existing session did not receive the expected retired-identity denial" >&2
+  cat "$SESSION_ERROR" >&2
+  exit 1
+}
+grep -q "SESSION_ALIVE:$SESSION_PID" "$SESSION_OUTPUT" || {
+  echo "Existing session did not remain alive after resolver denial" >&2
+  cat "$SESSION_OUTPUT" >&2
+  exit 1
+}
 
 echo "[Gate 1H] Explicitly terminate retired backend and verify it is gone"
 psql_admin -v pid="$SESSION_PID" -Atc \
@@ -95,6 +116,7 @@ done
   echo "Retired backend remained after pg_terminate_backend" >&2
   exit 1
 }
+exec 3>&-
 wait "$SESSION_CLIENT_PID" >/dev/null 2>&1 || true
 SESSION_CLIENT_PID=""
 if psql_role "$SESSION_ROLE" -c 'SELECT 1' >/dev/null 2>&1; then

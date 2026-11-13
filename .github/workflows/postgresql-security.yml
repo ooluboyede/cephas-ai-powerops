@@ -1,4 +1,4 @@
-name: PostgreSQL Security Gate 1E
+name: PostgreSQL Security Gate 1F
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   postgres-rls:
-    name: PostgreSQL ${{ matrix.postgres }} migration and RLS tests
+    name: PostgreSQL ${{ matrix.postgres }} migration and adversarial tests
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -49,5 +49,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
 
-      - name: Run disposable PostgreSQL migration and adversarial smoke tests
+      - name: Run Gate 1E baseline
         run: bash tests/postgresql/run_gate1e.sh
+
+      - name: Run Gate 1F adversarial extension
+        run: bash tests/postgresql/run_gate1f.sh

@@ -1,0 +1,53 @@
+name: PostgreSQL Security Gate 1E
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "security/**"
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-rls:
+    name: PostgreSQL ${{ matrix.postgres }} migration and RLS tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["14", "15", "16", "17"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGDATABASE: postgres
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      POWEROPS_TEST_PASSWORD: Gate1E-Disposable-Only-ChangeMe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Run disposable PostgreSQL migration and adversarial smoke tests
+        run: bash tests/postgresql/run_gate1e.sh

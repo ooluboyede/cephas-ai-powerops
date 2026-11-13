@@ -190,7 +190,7 @@ def generate_synthetic_pov_dataset(
 
         outage_count = rng.randint(0, 4)
         for outage_index in range(1, outage_count + 1):
-            start_offset = rng.randint(1, 30 * 24 * 60)
+            start_offset = rng.randint(240, 30 * 24 * 60)
             started = REFERENCE_TIME - timedelta(minutes=start_offset)
             duration = rng.randint(20, 240)
             restored = started + timedelta(minutes=duration)

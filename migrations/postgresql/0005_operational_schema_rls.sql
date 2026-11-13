@@ -198,14 +198,8 @@ BEGIN
             USING ERRCODE = '23505';
     END IF;
 
-    IF p_scope_kind = 'business_unit' AND NOT EXISTS (
-        SELECT 1 FROM powerops_data.business_units AS bu
-         WHERE bu.tenant_id = p_tenant_id
-           AND bu.business_unit_id = p_business_unit_id
-    ) THEN
-        RAISE EXCEPTION 'business-unit scope is not registered for tenant'
-            USING ERRCODE = '23503';
-    END IF;
+    -- The deployment authority must approve/register the BU before provisioning.
+    -- Do not query FORCE-RLS operational tables from an unscoped provisioner.
 
     EXECUTE pg_catalog.format(
         'CREATE ROLE %I NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS',

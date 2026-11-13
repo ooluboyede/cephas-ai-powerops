@@ -1,4 +1,4 @@
-name: PostgreSQL Security Gate 1E
+name: PostgreSQL Security Gates 1E and 1F
 
 on:
   pull_request:
@@ -49,5 +49,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
 
-      - name: Run disposable PostgreSQL migration and adversarial smoke tests
+      - name: Run disposable PostgreSQL migration and baseline RLS smoke tests
         run: bash tests/postgresql/run_gate1e.sh
+
+      - name: Run Gate 1F adversarial scope, ACL and lifecycle tests
+        run: bash tests/postgresql/run_gate1f.sh

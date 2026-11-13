@@ -49,5 +49,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
 
-      - name: Run Gate 1E, Gate 1F and Gate 1G validation chain
-        run: bash tests/postgresql/run_gate1g.sh
+      - name: Run Gate 1E, Gate 1F and Gate 1G with trace
+        run: |
+          set -o pipefail
+          bash -x tests/postgresql/run_gate1g.sh 2>&1 | tee "gate1g-postgres-${{ matrix.postgres }}.log"
+
+      - name: Upload PostgreSQL diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate1g-postgres-${{ matrix.postgres }}-diagnostic
+          path: gate1g-postgres-${{ matrix.postgres }}.log
+          if-no-files-found: warn
+          retention-days: 14

@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from json import dumps
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 
@@ -146,7 +146,7 @@ class PostgresRevenueAssuranceRepository:
             offset=offset,
         )
 
-    def get_finding(self, scope: ScopeContext, finding_id: Any) -> FindingRead | None:
+    def get_finding(self, scope: ScopeContext, finding_id: UUID) -> FindingRead | None:
         with self._connection(scope) as connection:
             row = connection.execute(
                 """
@@ -207,7 +207,7 @@ class PostgresRevenueAssuranceRepository:
     def record_decision(
         self,
         scope: ScopeContext,
-        case_id: Any,
+        case_id: UUID,
         payload: DecisionCreate,
     ) -> DecisionRead | None:
         decision_id = uuid4()

@@ -35,3 +35,12 @@ Configure `DATABASE_POOL_MIN_SIZE`, `DATABASE_POOL_MAX_SIZE` and `DATABASE_POOL_
 ## Revenue Assurance Gate 0.3.1
 
 Gate 0.3.1 introduces a provider-neutral secret retrieval contract and a redacted secret value type, with a development/test-only environment adapter. No production secret-manager provider is selected or integrated yet. See [Gate 0.3.1 implementation and limitations](docs/revenue-assurance-gate-0.3.1.md).
+
+
+## Revenue Assurance Gate 0.3.2
+
+Gate 0.3.2 adds version-pinned credential rotation orchestration. A deployment-owned trigger supplies an immutable secret version; the coordinator retrieves it, asks the BU-scoped repository to verify the replacement identity and swap pools, then records non-secret rotation metadata through a customer-owned audit sink. It does not add a provider SDK, scheduler, or HTTP admin endpoint. See [Gate 0.3.2 implementation and limitations](docs/revenue-assurance-gate-0.3.2.md).
+
+## PoV and main product separation
+
+The IBEDC PoV is an evaluation-only application and must not share production credentials, databases, deployment configuration or demo-only code paths with the main PowerOps product. The current PoV dashboard is on its own PR/branch and under `demo/revenue-assurance/`, but it is still in the same GitHub repository. A dedicated PoV repository and independent deployment are required before claiming full source-repository isolation. See [the product boundary contract](docs/POWEROPS_POV_PRODUCT_BOUNDARY.md).

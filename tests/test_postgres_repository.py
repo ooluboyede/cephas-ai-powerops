@@ -80,6 +80,17 @@ def test_postgres_repository_finding_case_decision_and_recovery_roundtrip() -> N
     assert decision is not None
     assert decision.decision == "approve"
 
+    with pytest.raises(HTTPException) as state_error:
+        repository.record_decision(
+            approver,
+            case.case_id,
+            DecisionCreate(
+                decision="reject",
+                reason="Attempt to change an already approved investigation case.",
+            ),
+        )
+    assert state_error.value.status_code == 409
+
     finance = ScopeContext(TENANT_A, BU_A1, "finance-verifier-01")
     outcome = repository.record_recovery_outcome(
         finance,

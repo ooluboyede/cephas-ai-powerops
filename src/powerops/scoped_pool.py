@@ -38,6 +38,7 @@ class ScopedConnectionPool:
         self._close_timeout = close_timeout
         self._lock = RLock()
         self._pool: Any | None = None
+        self._closed = False
 
     def _new_pool(self, dsn: str) -> Any:
         from psycopg.rows import dict_row
@@ -48,10 +49,17 @@ class ScopedConnectionPool:
             min_size=self._min_size,
             max_size=self._max_size,
             timeout=self._timeout,
-            kwargs={"row_factory": dict_row},
+            kwargs={
+                "row_factory": dict_row,
+                "connect_timeout": max(1, int(self._timeout)),
+            },
             open=False,
         )
-        pool.open(wait=True)
+        try:
+            pool.open(wait=True)
+        except Exception:
+            pool.close(timeout=self._close_timeout)
+            raise
         return pool
 
     @staticmethod
@@ -75,6 +83,11 @@ class ScopedConnectionPool:
 
     def _get_pool_and_connection(self) -> tuple[Any, Any]:
         with self._lock:
+            if self._closed:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="PostgreSQL connection pool is closed",
+                )
             if self._pool is None:
                 try:
                     self._pool = self._new_pool(self._dsn)
@@ -131,6 +144,9 @@ class ScopedConnectionPool:
             raise
 
         with self._lock:
+            if self._closed:
+                candidate.close(timeout=self._close_timeout)
+                raise RuntimeError("Cannot rotate credentials after pool shutdown")
             previous = self._pool
             self._pool = candidate
             self._dsn = new_dsn
@@ -143,6 +159,7 @@ class ScopedConnectionPool:
     def close(self) -> None:
         """Stop new checkouts and drain the current pool."""
         with self._lock:
+            self._closed = True
             previous = self._pool
             self._pool = None
         if previous is not None:

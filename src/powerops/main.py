@@ -46,6 +46,9 @@ def readiness() -> dict[str, str]:
                 identity = connection.execute(
                     "SELECT scope_kind FROM powerops_security.resolve_authenticated_scope()"
                 ).fetchone()
+                connection.execute(
+                    "SELECT 1 FROM revenue_assurance.findings LIMIT 0"
+                )
             if identity is None or identity[0] != "business_unit":
                 raise RuntimeError("Database identity is not business-unit scoped")
         except Exception as exc:

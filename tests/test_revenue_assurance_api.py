@@ -234,9 +234,14 @@ def test_unknown_finding_returns_404(client: TestClient) -> None:
 
 
 def test_missing_authenticated_principal_fails_closed() -> None:
-    with TestClient(app) as test_client:
-        response = test_client.get("/api/v1/revenue/findings")
-    assert response.status_code == 401
+    previous = app.state.jwt_verifier
+    app.state.jwt_verifier = object()
+    try:
+        with TestClient(app) as test_client:
+            response = test_client.get("/api/v1/revenue/findings")
+        assert response.status_code == 401
+    finally:
+        app.state.jwt_verifier = previous
 
 
 def test_missing_repository_fails_closed(client: TestClient) -> None:

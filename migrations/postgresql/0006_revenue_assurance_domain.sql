@@ -280,7 +280,11 @@ BEGIN
         'GRANT USAGE ON SCHEMA revenue_assurance TO %I', p_role_name
     );
     EXECUTE pg_catalog.format(
-        'GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA revenue_assurance TO %I',
+        'GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA revenue_assurance TO %I',
+        p_role_name
+    );
+    EXECUTE pg_catalog.format(
+        'GRANT UPDATE (case_status) ON revenue_assurance.investigation_cases TO %I',
         p_role_name
     );
 END

@@ -7,6 +7,7 @@ Credential rotation validates a replacement pool before atomically swapping it.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from threading import RLock
 from typing import Any
@@ -39,6 +40,13 @@ class ScopedConnectionPool:
         self._lock = RLock()
         self._pool: Any | None = None
         self._closed = False
+        self._active_checkouts = 0
+        self._total_checkouts = 0
+        self._consecutive_failures = 0
+        self._last_success_at: datetime | None = None
+        self._last_failure_at: datetime | None = None
+        self._last_failure_kind: str | None = None
+        self._rotation_count = 0
 
     def _new_pool(self, dsn: str) -> Any:
         from psycopg.rows import dict_row
@@ -99,11 +107,19 @@ class ScopedConnectionPool:
             pool = self._pool
             try:
                 connection = pool.getconn(timeout=self._timeout)
-            except Exception:
+            except Exception as exc:
+                self._consecutive_failures += 1
+                self._last_failure_at = datetime.now(timezone.utc)
+                self._last_failure_kind = type(exc).__name__
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="PostgreSQL connection pool is unavailable",
                 ) from None
+            self._active_checkouts += 1
+            self._total_checkouts += 1
+            self._consecutive_failures = 0
+            self._last_success_at = datetime.now(timezone.utc)
+            self._last_failure_kind = None
             return pool, connection
 
     @contextmanager
@@ -117,7 +133,34 @@ class ScopedConnectionPool:
                 self._verify_scope(connection, tenant_id, business_unit_id)
                 yield connection
         finally:
-            pool.putconn(connection)
+            try:
+                pool.putconn(connection)
+            finally:
+                with self._lock:
+                    self._active_checkouts = max(0, self._active_checkouts - 1)
+
+    def health_snapshot(self) -> dict[str, object]:
+        """Return non-secret operational counters; never expose DSN or scope IDs."""
+        with self._lock:
+            if self._closed:
+                state = "closed"
+            elif self._pool is None:
+                state = "not_initialized"
+            elif self._consecutive_failures:
+                state = "degraded"
+            else:
+                state = "healthy"
+            return {
+                "state": state,
+                "active_checkouts": self._active_checkouts,
+                "total_checkouts": self._total_checkouts,
+                "consecutive_checkout_failures": self._consecutive_failures,
+                "last_success_at": self._last_success_at,
+                "last_failure_at": self._last_failure_at,
+                "last_failure_kind": self._last_failure_kind,
+                "successful_rotations": self._rotation_count,
+                "pool_max_size": self._max_size,
+            }
 
     def rotate_credentials(
         self,
@@ -150,6 +193,10 @@ class ScopedConnectionPool:
             previous = self._pool
             self._pool = candidate
             self._dsn = new_dsn
+            self._rotation_count += 1
+            self._consecutive_failures = 0
+            self._last_success_at = datetime.now(timezone.utc)
+            self._last_failure_kind = None
 
         # The old pool is drained after the swap. Existing borrowers may finish;
         # no new checkout can obtain the old pool through this manager.

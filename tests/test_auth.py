@@ -260,10 +260,27 @@ def test_oidc_verifier_cryptographically_checks_rs256_signature() -> None:
     }
     valid_token = jwt.encode(claims, private_key, algorithm="RS256")
     invalid_token = jwt.encode(claims, other_private_key, algorithm="RS256")
+    wrong_issuer = jwt.encode(
+        {**claims, "iss": "https://untrusted.example.com"},
+        private_key,
+        algorithm="RS256",
+    )
+    wrong_audience = jwt.encode(
+        {**claims, "aud": "another-api"},
+        private_key,
+        algorithm="RS256",
+    )
+    wrong_algorithm = jwt.encode(claims, "shared-secret", algorithm="HS256")
 
     assert verifier.verify(valid_token).subject == "oidc-user-123"
     with pytest.raises(jwt.InvalidSignatureError):
         verifier.verify(invalid_token)
+    with pytest.raises(jwt.InvalidIssuerError):
+        verifier.verify(wrong_issuer)
+    with pytest.raises(jwt.InvalidAudienceError):
+        verifier.verify(wrong_audience)
+    with pytest.raises(jwt.InvalidAlgorithmError):
+        verifier.verify(wrong_algorithm)
 
 
 def test_readiness_fails_closed_without_authentication_or_database(

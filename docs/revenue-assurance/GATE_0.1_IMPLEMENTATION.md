@@ -10,8 +10,9 @@
 - Additive PostgreSQL migration 0006 for source batches, findings, investigation cases, decisions, recovery outcomes and append-only audit events.
 - Forced RLS policies use the existing powerops_security.row_scope_permits(tenant_id,business_unit_id) predicate.
 - Composite foreign keys prevent a case, decision or recovery row from referencing a parent in another tenant or business unit.
-- Explicit post-migration grant function provisions the new schema only to an active, non-superuser, scope-bound login identity.
-- Disposable PostgreSQL integration harness verifies BU reads, cross-BU insert denial and audit immutability.
+- Explicit post-migration grant function provisions the new schema only to an active, non-superuser, business-unit-scoped login; tenant-wide logins are rejected.
+- Runtime grants are least-privilege: SELECT/INSERT on domain tables and UPDATE only on investigation case status; source findings and source batches cannot be rewritten by the runtime login.
+- Disposable PostgreSQL integration harness verifies BU reads, tenant-wide grant rejection, cross-BU insert denial, source-evidence write restrictions and audit immutability.
 - API contract and automated route tests.
 
 ## Existing work preserved

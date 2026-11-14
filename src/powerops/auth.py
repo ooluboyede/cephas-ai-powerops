@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.error import URLError
 from uuid import UUID
 
 import jwt
@@ -29,7 +30,7 @@ class OidcJwtVerifier:
     """Verify RS256 access tokens against a configured OIDC JWKS endpoint."""
 
     def __init__(self, *, issuer: str, audience: str, jwks_url: str) -> None:
-        self.issuer = issuer.rstrip("/")
+        self.issuer = issuer
         self.audience = audience
         self.jwks_client = PyJWKClient(
             jwks_url,
@@ -104,6 +105,11 @@ def get_current_principal(request: Request) -> AuthenticatedPrincipal:
 
     try:
         return verifier.verify(token.strip())
+    except (URLError, TimeoutError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Identity provider keys are temporarily unavailable",
+        ) from None
     except (PyJWTError, ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

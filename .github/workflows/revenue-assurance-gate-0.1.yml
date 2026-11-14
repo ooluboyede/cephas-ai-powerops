@@ -1,0 +1,78 @@
+name: PowerOps Revenue Assurance Gate 0.1
+
+on:
+  push:
+    branches:
+      - "security/**"
+  pull_request:
+    branches:
+      - "security/**"
+
+permissions:
+  contents: read
+
+jobs:
+  application-and-postgres:
+    name: Python quality and PostgreSQL ${{ matrix.postgres }} scope tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["14", "15", "16", "17"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGDATABASE: postgres
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      POWEROPS_TEST_PASSWORD: Gate1E-Disposable-Only-ChangeMe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Install pinned uv
+        run: python -m pip install uv==0.13.7
+
+      - name: Install locked dependencies
+        run: uv sync --locked --all-extras --python 3.11
+
+      - name: Ruff
+        run: uv run --locked --python 3.11 ruff check .
+
+      - name: Mypy
+        run: uv run --locked --python 3.11 mypy src
+
+      - name: Python tests
+        run: uv run --locked --python 3.11 pytest
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Run existing PostgreSQL 0.1.1 baseline and RLS gate
+        run: bash tests/postgresql/run_gate1e.sh
+
+      - name: Run Revenue Assurance domain schema and isolation tests
+        run: bash tests/postgresql/run_revenue_assurance_schema.sh

@@ -112,7 +112,7 @@ if role_sql pwr_gate1e_bu_a1 -c "UPDATE revenue_assurance.source_batches SET bat
 fi
 
 echo "[Revenue Assurance 0.1] Verify audit rows are append-only"
-if role_sql pwr_gate1e_bu_a1 -c "UPDATE revenue_assurance.audit_events SET action='tampered'
+if admin -c "UPDATE revenue_assurance.audit_events SET action='tampered'
     WHERE event_id='e1000000-0000-4000-8000-000000000001'" >/dev/null 2>&1; then
   echo "FAIL: audit update unexpectedly succeeded" >&2
   exit 1

@@ -9,7 +9,8 @@
 - OIDC/JWT authentication using a pinned RS256 algorithm, configured issuer/audience and cached JWKS keys; verified exp/iat/sub/iss/aud claims are required.
 - Tenant ID, business-unit ID and roles are derived from signed token claims; no tenant/BU headers or caller-supplied payload fields are trusted.
 - OIDC provider settings are all-or-none and HTTPS-only except localhost development. Missing OIDC configuration returns 503; missing/invalid bearer tokens return 401; JWKS network outages return 503.
-- Fail-closed behavior: absent authenticated identity is 401; absent persistence adapter is 503.
+- Fail-closed behavior: missing/invalid bearer token is 401; missing OIDC configuration, JWKS outage or absent persistence adapter is 503.
+- Readiness returns 503 until both OIDC authentication and a BU-scoped PostgreSQL dependency are configured and verified.
 - Additive PostgreSQL migration 0006 for source batches, findings, investigation cases, decisions, recovery outcomes and append-only audit events.
 - Forced RLS policies use the existing powerops_security.row_scope_permits(tenant_id,business_unit_id) predicate.
 - Composite foreign keys prevent a case, decision or recovery row from referencing a parent in another tenant or business unit.
@@ -24,7 +25,7 @@ This branch starts from security/0.1.1-gate1i-credential-rotation-eviction and c
 
 ## Explicit limitations
 
-- The initial OIDC contract expects an RS256-signed access token with `iss`, `aud`, `exp`, `iat`, `sub`, `tenant_id`, `business_unit_id` and a non-empty string-array `roles` claim. Map the customer identity provider to these claims or use a customer-controlled token broker. Install `requirements-auth.txt` and configure `OIDC_ISSUER`, `OIDC_AUDIENCE` and `OIDC_JWKS_URL` together.
+- The initial OIDC contract expects an RS256-signed access token with `iss`, `aud`, `exp`, `iat`, `sub`, `tenant_id`, `business_unit_id` and a non-empty string-array `roles` claim. Map the customer identity provider to these claims or use a customer-controlled token broker. Install `requirements-auth.txt` and configure `OIDC_ISSUER`, `OIDC_AUDIENCE` and `OIDC_JWKS_URL` together. JWKS keys are cached for five minutes; access-token revocation is not checked online, so the issuer must use short-lived access tokens and a tested signing-key rotation policy.
 - A concrete PostgreSQL repository adapter is implemented. Configure DATABASE_URL with a dedicated BU-scoped login and install requirements-postgres.txt. The adapter verifies the authenticated database scope on each operation and opens a fresh connection per operation. A managed connection pool and secret-manager rotation lifecycle remain unimplemented.
 - PostgreSQL migration, repository and RLS checks must execute successfully on supported PostgreSQL versions before the schema gate can be marked passed.
 - No live utility integrations, customer data, model inference, automatic billing action, recovery execution, disconnection or grid-control command is implemented.

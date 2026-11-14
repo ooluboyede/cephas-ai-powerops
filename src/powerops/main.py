@@ -1,10 +1,11 @@
 """HTTP application entry point."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from powerops import __version__
 from powerops.config import get_settings
 from powerops.revenue_assurance import router as revenue_assurance_router
+from powerops.postgres_repository import PostgresRevenueAssuranceRepository
 
 settings = get_settings()
 app = FastAPI(
@@ -14,6 +15,11 @@ app = FastAPI(
 )
 
 
+app.state.revenue_assurance_repository = (
+    PostgresRevenueAssuranceRepository(settings.database_url.get_secret_value())
+    if settings.database_url is not None
+    else None
+)
 app.include_router(revenue_assurance_router)
 
 
@@ -31,6 +37,30 @@ def readiness() -> dict[str, str]:
     dependencies are introduced, this endpoint must check them and return a
     non-2xx response whenever a required dependency is unavailable.
     """
+    if settings.database_url is not None:
+        try:
+            import psycopg
+
+            with psycopg.connect(
+                settings.database_url.get_secret_value(), connect_timeout=3
+            ) as connection:
+                identity = connection.execute(
+                    "SELECT scope_kind FROM powerops_security.resolve_authenticated_scope()"
+                ).fetchone()
+            if identity is None or identity[0] != "business_unit":
+                raise RuntimeError("Database identity is not business-unit scoped")
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Configured PostgreSQL dependency or business-unit scope is unavailable",
+            ) from exc
+        return {
+            "status": "ready",
+            "stage": "database_configured",
+            "readiness_scope": "postgresql_business_unit_scope",
+            "dependency_checks": "postgresql_scope_verified",
+        }
+
     return {
         "status": "ready",
         "stage": "foundation",

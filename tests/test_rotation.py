@@ -21,7 +21,12 @@ REFERENCE = "vault://customer/powerops/bu-a/database"
 class FakeProvider:
     provider_name = "test-provider"
 
-    def __init__(self, *, value: str = "postgresql://candidate-secret", returned_version: str = "v2"):
+    def __init__(
+        self,
+        *,
+        value: str = "postgresql://candidate-secret",
+        returned_version: str = "v2",
+    ):
         self.value = value
         self.returned_version = returned_version
         self.calls: list[tuple[str, str | None]] = []
@@ -67,7 +72,11 @@ class FakeAudit:
         self.events.append(event)
 
 
-def service(provider=None, repository=None, audit=None):
+def service(
+    provider: FakeProvider | None = None,
+    repository: FakeRepository | None = None,
+    audit: FakeAudit | None = None,
+) -> tuple[CredentialRotationService, FakeProvider, FakeRepository, FakeAudit]:
     provider = provider or FakeProvider()
     repository = repository or FakeRepository()
     audit = audit or FakeAudit()
@@ -118,7 +127,7 @@ def test_provider_failure_preserves_active_credentials() -> None:
         rotation.rotate_to_version("v2")
     assert repository.rotations == []
     assert rotation.active_version is None
-    assert audit.events == []
+    assert audit.events[0].outcome == "failed"
 
 
 def test_provider_cannot_substitute_version_or_reference() -> None:
@@ -165,6 +174,8 @@ def test_failure_audit_outage_is_not_silently_swallowed() -> None:
     audit = FakeAudit()
     audit.fail = True
     rotation, _, _, _ = service(repository=repository, audit=audit)
-    with pytest.raises(CredentialRotationAuditError, match="failure-audit recording also failed"):
+    with pytest.raises(
+        CredentialRotationAuditError, match="failure-audit recording also failed"
+    ):
         rotation.rotate_to_version("v2")
     assert rotation.active_version is None

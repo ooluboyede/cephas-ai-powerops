@@ -98,7 +98,11 @@ class CredentialRotationService:
         The version must be explicit. "latest" aliases and unversioned development
         secrets are not accepted because they cannot provide a reproducible rotation.
         """
-        if not version.strip() or version in {"latest", "current", "unversioned"}:
+        if not version.strip() or version.casefold() in {
+            "latest",
+            "current",
+            "unversioned",
+        }:
             raise CredentialRotationError("An immutable secret version is required")
 
         with self._lock:

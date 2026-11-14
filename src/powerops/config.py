@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     app_name: str = "CEPHAS AI PowerOps"
     app_env: str = "development"
     log_level: str = "INFO"
+    database_url: SecretStr | None = None
 
 
 @lru_cache

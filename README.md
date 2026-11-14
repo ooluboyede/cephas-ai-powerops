@@ -44,3 +44,8 @@ Gate 0.3.2 adds version-pinned credential rotation orchestration. A deployment-o
 ## PoV and main product separation
 
 The IBEDC PoV is an evaluation-only application and must not share production credentials, databases, deployment configuration or demo-only code paths with the main PowerOps product. The current PoV dashboard is on its own PR/branch and under `demo/revenue-assurance/`, but it is still in the same GitHub repository. A dedicated PoV repository and independent deployment are required before claiming full source-repository isolation. See [the product boundary contract](docs/POWEROPS_POV_PRODUCT_BOUNDARY.md).
+
+
+## Revenue Assurance Gate 0.3.3
+
+Gate 0.3.3 adds non-secret PostgreSQL pool health telemetry: lifecycle state, active/cumulative checkouts, consecutive checkout failures, last success/failure timestamps, failure class, and successful pool-rotation count. The internal `GET /health/pool` endpoint must be restricted by customer ingress policy. This gate does not add application-level retries, backoff, automated reconnection, scheduling, or durable metrics aggregation. See [Gate 0.3.3 implementation and limitations](docs/revenue-assurance-gate-0.3.3.md).

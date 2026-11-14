@@ -51,6 +51,10 @@ class PostgresRevenueAssuranceRepository:
         """Close and drain the service-instance pool during shutdown."""
         self._pool.close()
 
+    def pool_health(self) -> dict[str, object]:
+        """Return non-secret pool health counters for operational monitoring."""
+        return self._pool.health_snapshot()
+
     def rotate_credentials(self, new_dsn: str, scope: ScopeContext) -> None:
         """Rotate one BU login only after the replacement identity is verified."""
         self._pool.rotate_credentials(

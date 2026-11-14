@@ -226,8 +226,18 @@ class PostgresRevenueAssuranceRepository:
                 """,
                 (scope.tenant_id, scope.business_unit_id, case_id),
             ).fetchone()
-            if case is None or case["case_status"] in ("closed", "rejected"):
+            if case is None:
                 return None
+            allowed_statuses = {
+                "approve": {"open", "in_review"},
+                "reject": {"open", "in_review", "awaiting_evidence"},
+                "request_more_evidence": {"open", "in_review"},
+            }
+            if case["case_status"] not in allowed_statuses[payload.decision]:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Decision is not valid for the current case state",
+                )
             if payload.decision == "approve" and case["created_by"] == scope.subject:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -292,8 +302,13 @@ class PostgresRevenueAssuranceRepository:
                 """,
                 (scope.tenant_id, scope.business_unit_id, case_id),
             ).fetchone()
-            if case is None or case["case_status"] != "approved":
+            if case is None:
                 return None
+            if case["case_status"] != "approved":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Recovery outcomes require an approved investigation case",
+                )
             row = connection.execute(
                 """
                 INSERT INTO revenue_assurance.recovery_outcomes

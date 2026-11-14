@@ -72,7 +72,8 @@ pidfile = $workdir/pgbouncer.pid
 EOF
 
 echo "[Gate 1H] Start PgBouncer in transaction-pooling mode"
-pgbouncer "$workdir/pgbouncer.ini"
+pgbouncer "$workdir/pgbouncer.ini" >"$workdir/pgbouncer-startup.log" 2>&1 &
+pgbouncer_pid=$!
 for attempt in $(seq 1 30); do
   if PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -h 127.0.0.1 -p "$PGBOUNCER_PORT" -U pwr_gate1h_a1 -d "$PGDATABASE" -Atc 'SELECT 1' >/dev/null 2>&1; then
     break
@@ -80,7 +81,7 @@ for attempt in $(seq 1 30); do
   sleep 1
 done
 if ! PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -h 127.0.0.1 -p "$PGBOUNCER_PORT" -U pwr_gate1h_a1 -d "$PGDATABASE" -Atc 'SELECT 1' >/dev/null 2>&1; then
-  cat "$workdir/pgbouncer.log" >&2
+  cat "$workdir/pgbouncer-startup.log" "$workdir/pgbouncer.log" 2>/dev/null >&2
   echo "FAIL: PgBouncer did not become ready" >&2
   exit 1
 fi

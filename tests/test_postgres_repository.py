@@ -4,8 +4,9 @@ import os
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import HTTPException
 import pytest
+
+from fastapi import HTTPException
 
 from powerops.postgres_repository import PostgresRevenueAssuranceRepository
 from powerops.revenue_assurance import (

@@ -151,3 +151,15 @@ def test_valid_rotation_swaps_then_drains_previous_pool(fake_psycopg: None) -> N
         pass
     assert replacement.returned == 2  # rotation probe + application checkout
     pool.close()
+
+
+def test_close_prevents_new_pool_creation(fake_psycopg: None) -> None:
+    pool = ScopedConnectionPool("bu-a-dsn")
+    with pool.connection(TENANT, BUSINESS_UNIT):
+        pass
+    pool.close()
+    with pytest.raises(HTTPException) as error:
+        with pool.connection(TENANT, BUSINESS_UNIT):
+            pytest.fail("A closed pool must not be recreated")
+    assert error.value.status_code == 503
+    assert len(FakePool.instances) == 1

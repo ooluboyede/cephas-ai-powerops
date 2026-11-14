@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -156,7 +156,7 @@ def get_repository(request: Request) -> RevenueAssuranceRepository:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Revenue Assurance persistence is not configured",
         )
-    return repository
+    return cast(RevenueAssuranceRepository, repository)
 
 
 def _scope(principal: AuthenticatedPrincipal) -> ScopeContext:

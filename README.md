@@ -23,3 +23,10 @@ dependency with `uv pip install -r requirements-auth.txt`, then set `OIDC_ISSUER
 `OIDC_AUDIENCE` and `OIDC_JWKS_URL`. All three settings are required together. The
 provider's RS256 access tokens must carry the documented tenant, business-unit and roles claims.
 See `docs/revenue-assurance/API_CONTRACTS.md` for the claim contract.
+
+
+## Revenue Assurance Gate 0.2
+
+Gate 0.2 adds a bounded PostgreSQL pool isolated to one BU-scoped database login per application service instance, per-checkout authenticated-scope verification, transactional rollback/commit on pool return, controlled credential-pool replacement after scope verification, and graceful pool shutdown. See [Gate 0.2 implementation and limitations](docs/revenue-assurance-gate-0.2.md).
+
+Configure `DATABASE_POOL_MIN_SIZE`, `DATABASE_POOL_MAX_SIZE` and `DATABASE_POOL_TIMEOUT_SECONDS` as needed. Do not share a pool across business units. Secret-manager SDK integration and automated rotation scheduling remain future work; the repository exposes a validated credential-rotation operation for a deployment-owned secret provider.

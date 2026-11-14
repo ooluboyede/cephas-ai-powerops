@@ -48,6 +48,18 @@ def liveness() -> dict[str, str]:
     return {"status": "alive", "service": "powerops"}
 
 
+@app.get("/health/pool", tags=["operations"])
+def pool_health() -> dict[str, object]:
+    """Expose non-secret connection-pool telemetry; never expose tenant IDs or DSNs."""
+    repository = app.state.revenue_assurance_repository
+    if not isinstance(repository, PostgresRevenueAssuranceRepository):
+        raise HTTPException(
+            status_code=503,
+            detail="BU-scoped PostgreSQL repository is not configured",
+        )
+    return repository.pool_health()
+
+
 @app.get("/health/ready", tags=["operations"])
 def readiness() -> dict[str, str]:
     """Report ready only when authentication and scoped persistence are configured."""

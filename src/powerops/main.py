@@ -41,45 +41,32 @@ def liveness() -> dict[str, str]:
 
 @app.get("/health/ready", tags=["operations"])
 def readiness() -> dict[str, str]:
-    """Report readiness for the configured application dependencies.
+    """Report ready only when authentication and scoped persistence are configured."""
+    if app.state.jwt_verifier is None or settings.database_url is None:
+        raise HTTPException(
+            status_code=503,
+            detail="OIDC authentication and BU-scoped PostgreSQL must be configured",
+        )
+    try:
+        import psycopg
 
-    With no DATABASE_URL, readiness is explicitly limited to bootstrap. With a
-    configured DSN, verify the connection and that the database login is BU-scoped.
-    """
-    if settings.database_url is not None:
-        try:
-            import psycopg
-
-            with psycopg.connect(
-                settings.database_url.get_secret_value(), connect_timeout=3
-            ) as connection:
-                identity = connection.execute(
-                    "SELECT scope_kind FROM powerops_security.resolve_authenticated_scope()"
-                ).fetchone()
-                connection.execute(
-                    "SELECT 1 FROM revenue_assurance.findings LIMIT 0"
-                )
-            if identity is None or identity[0] != "business_unit":
-                raise RuntimeError("Database identity is not business-unit scoped")
-        except Exception as exc:
-            raise HTTPException(
-                status_code=503,
-                detail="Configured PostgreSQL dependency or business-unit scope is unavailable",
-            ) from exc
-        return {
-            "status": "ready",
-            "stage": "database_configured",
-            "readiness_scope": "postgresql_business_unit_scope",
-            "dependency_checks": "postgresql_scope_verified",
-            "authentication": (
-                "oidc_configured" if app.state.jwt_verifier is not None else "not_configured"
-            ),
-        }
-
+        with psycopg.connect(
+            settings.database_url.get_secret_value(), connect_timeout=3
+        ) as connection:
+            identity = connection.execute(
+                "SELECT scope_kind FROM powerops_security.resolve_authenticated_scope()"
+            ).fetchone()
+            connection.execute("SELECT 1 FROM revenue_assurance.findings LIMIT 0")
+        if identity is None or identity[0] != "business_unit":
+            raise RuntimeError("Database identity is not business-unit scoped")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Configured PostgreSQL dependency or business-unit scope is unavailable",
+        ) from exc
     return {
         "status": "ready",
-        "stage": "foundation",
-        "readiness_scope": "bootstrap_only",
-        "dependency_checks": "not_configured",
-        "authentication": "oidc_configured" if app.state.jwt_verifier is not None else "not_configured",
+        "stage": "database_and_authentication_configured",
+        "readiness_scope": "oidc_and_postgresql_business_unit_scope",
+        "dependency_checks": "oidc_configured_and_postgresql_scope_verified",
     }

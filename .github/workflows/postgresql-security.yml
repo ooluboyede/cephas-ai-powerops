@@ -1,4 +1,4 @@
-name: PostgreSQL Security Gates 1E and 1F
+name: PostgreSQL Security Gates 1E, 1F and 1G
 
 on:
   pull_request:
@@ -54,3 +54,6 @@ jobs:
 
       - name: Run Gate 1F adversarial scope, ACL and lifecycle tests
         run: bash tests/postgresql/run_gate1f.sh
+
+      - name: Run Gate 1G session identity and retirement fencing tests
+        run: bash tests/postgresql/run_gate1g.sh

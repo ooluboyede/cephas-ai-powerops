@@ -163,3 +163,35 @@ def test_close_prevents_new_pool_creation(fake_psycopg: None) -> None:
             pytest.fail("A closed pool must not be recreated")
     assert error.value.status_code == 503
     assert len(FakePool.instances) == 1
+
+
+
+def test_health_snapshot_reports_lifecycle_and_checkout_counters(
+    fake_psycopg: None,
+) -> None:
+    pool = ScopedConnectionPool("bu-a-dsn", max_size=4)
+    initial = pool.health_snapshot()
+    assert initial["state"] == "not_initialized"
+    assert initial["active_checkouts"] == 0
+
+    with pool.connection(TENANT, BUSINESS_UNIT):
+        active = pool.health_snapshot()
+        assert active["state"] == "healthy"
+        assert active["active_checkouts"] == 1
+        assert active["total_checkouts"] == 1
+
+    after = pool.health_snapshot()
+    assert after["active_checkouts"] == 0
+    assert after["total_checkouts"] == 1
+    assert after["pool_max_size"] == 4
+    assert "dsn" not in after
+    assert "tenant_id" not in after
+
+    pool.rotate_credentials(
+        "rotated-bu-dsn",
+        expected_tenant_id=TENANT,
+        expected_business_unit_id=BUSINESS_UNIT,
+    )
+    assert pool.health_snapshot()["successful_rotations"] == 1
+    pool.close()
+    assert pool.health_snapshot()["state"] == "closed"

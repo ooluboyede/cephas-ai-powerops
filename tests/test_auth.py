@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from powerops.auth import AuthenticatedPrincipal, OidcJwtVerifier
 from powerops.main import app
+from powerops.revenue_assurance import FindingPage, ScopeContext
 
 
 TENANT_ID = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
@@ -114,20 +115,41 @@ def test_revenue_endpoint_requires_bearer_token() -> None:
         app.state.jwt_verifier = previous
 
 
+class EmptyFindingsRepository:
+    def __init__(self) -> None:
+        self.scope: ScopeContext | None = None
+
+    def list_findings(
+        self,
+        scope: ScopeContext,
+        *,
+        finding_status: str | None,
+        category: str | None,
+        limit: int,
+        offset: int,
+    ) -> FindingPage:
+        self.scope = scope
+        return FindingPage(items=[], total=0, limit=limit, offset=offset)
+
+
 def test_revenue_endpoint_derives_scope_from_verified_token() -> None:
     previous_verifier = app.state.jwt_verifier
     previous_repository = app.state.revenue_assurance_repository
+    repository = EmptyFindingsRepository()
     app.state.jwt_verifier = StubVerifier()
-    app.state.revenue_assurance_repository = None
+    app.state.revenue_assurance_repository = repository
     try:
         with TestClient(app) as client:
             response = client.get(
                 "/api/v1/revenue/findings",
                 headers={"Authorization": "Bearer valid-token"},
             )
-        # Authentication succeeds; persistence then fails closed because it is not configured.
-        assert response.status_code == 503
-        assert response.json()["detail"] == "Revenue Assurance persistence is not configured"
+        assert response.status_code == 200
+        assert repository.scope == ScopeContext(
+            subject="oidc-user-123",
+            tenant_id=TENANT_ID,
+            business_unit_id=BUSINESS_UNIT_ID,
+        )
     finally:
         app.state.jwt_verifier = previous_verifier
         app.state.revenue_assurance_repository = previous_repository
@@ -242,3 +264,19 @@ def test_oidc_verifier_cryptographically_checks_rs256_signature() -> None:
     assert verifier.verify(valid_token).subject == "oidc-user-123"
     with pytest.raises(jwt.InvalidSignatureError):
         verifier.verify(invalid_token)
+
+
+def test_readiness_fails_closed_without_authentication_or_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from powerops.main import settings
+
+    previous_verifier = app.state.jwt_verifier
+    monkeypatch.setattr(settings, "database_url", None)
+    app.state.jwt_verifier = None
+    try:
+        with TestClient(app) as client:
+            response = client.get("/health/ready")
+        assert response.status_code == 503
+    finally:
+        app.state.jwt_verifier = previous_verifier

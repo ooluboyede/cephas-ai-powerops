@@ -25,7 +25,23 @@ echo "[Revenue Assurance 0.1] Grant the new schema to existing active scoped tes
 admin <<'SQL'
 SELECT powerops_security.grant_revenue_assurance_access('pwr_gate1e_bu_a1');
 SELECT powerops_security.grant_revenue_assurance_access('pwr_gate1e_bu_a2');
-SELECT powerops_security.grant_revenue_assurance_access('pwr_gate1e_tenant_b');
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM powerops_security.grant_revenue_assurance_access('pwr_gate1e_tenant_a');
+    RAISE EXCEPTION 'FAIL: tenant-wide login unexpectedly received Revenue Assurance access';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+  BEGIN
+    PERFORM powerops_security.grant_revenue_assurance_access('pwr_gate1e_tenant_b');
+    RAISE EXCEPTION 'FAIL: tenant-wide login unexpectedly received Revenue Assurance access';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+END
+$$;
 SQL
 
 echo "[Revenue Assurance 0.1] Seed synthetic records in two business units"
@@ -69,9 +85,6 @@ count_a1=$(role_sql pwr_gate1e_bu_a1 -Atc "SELECT count(*) FROM revenue_assuranc
 
 count_a2=$(role_sql pwr_gate1e_bu_a2 -Atc "SELECT count(*) FROM revenue_assurance.findings")
 [[ "$count_a2" == "1" ]] || { echo "FAIL: BU A2 saw $count_a2 findings, expected 1" >&2; exit 1; }
-
-count_tenant_b=$(role_sql pwr_gate1e_tenant_b -Atc "SELECT count(*) FROM revenue_assurance.findings")
-[[ "$count_tenant_b" == "0" ]] || { echo "FAIL: Tenant B saw $count_tenant_b Tenant A findings" >&2; exit 1; }
 
 echo "[Revenue Assurance 0.1] Verify cross-BU insert is rejected by RLS"
 if role_sql pwr_gate1e_bu_a1 -c "INSERT INTO revenue_assurance.source_batches

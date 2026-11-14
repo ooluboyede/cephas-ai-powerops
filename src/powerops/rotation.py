@@ -33,6 +33,19 @@ class RotationAuditEvent:
     occurred_at: datetime
 
 
+class CredentialRepository(Protocol):
+    """Narrow repository contract; implementation owns pool swap and DB identity checks."""
+
+    def rotate_credentials(
+        self,
+        new_dsn: str,
+        *,
+        expected_tenant_id: UUID,
+        expected_business_unit_id: UUID,
+    ) -> None:
+        """Validate candidate credentials and replace the scoped pool atomically."""
+
+
 class RotationAuditSink(Protocol):
     """Customer-owned durable audit destination for non-secret rotation metadata."""
 
@@ -58,7 +71,7 @@ class CredentialRotationService:
         *,
         provider: SecretProvider,
         secret_reference: str,
-        repository: object,
+        repository: CredentialRepository,
         tenant_id: UUID,
         business_unit_id: UUID,
         audit_sink: RotationAuditSink,
@@ -128,10 +141,13 @@ class CredentialRotationService:
                         )
                     )
                 except Exception:
-                    pass
+                    raise CredentialRotationAuditError(
+                        "Rotation failed and failure-audit recording also failed; "
+                        "active credentials remain unchanged"
+                    ) from None
                 raise CredentialRotationError(
                     "Replacement credential validation failed; active credentials "
-                    "were not intentionally changed"
+                    "remain unchanged"
                 ) from None
 
             rotated_at = datetime.now(timezone.utc)

@@ -3,6 +3,7 @@
 from fastapi import FastAPI, HTTPException
 
 from powerops import __version__
+from powerops.auth import OidcJwtVerifier
 from powerops.config import get_settings
 from powerops.postgres_repository import PostgresRevenueAssuranceRepository
 from powerops.revenue_assurance import router as revenue_assurance_router
@@ -18,6 +19,15 @@ app = FastAPI(
 app.state.revenue_assurance_repository = (
     PostgresRevenueAssuranceRepository(settings.database_url.get_secret_value())
     if settings.database_url is not None
+    else None
+)
+app.state.jwt_verifier = (
+    OidcJwtVerifier(
+        issuer=settings.oidc_issuer,
+        audience=settings.oidc_audience,
+        jwks_url=settings.oidc_jwks_url,
+    )
+    if settings.oidc_issuer and settings.oidc_audience and settings.oidc_jwks_url
     else None
 )
 app.include_router(revenue_assurance_router)
@@ -61,6 +71,7 @@ def readiness() -> dict[str, str]:
             "stage": "database_configured",
             "readiness_scope": "postgresql_business_unit_scope",
             "dependency_checks": "postgresql_scope_verified",
+            "authentication": "oidc_configured" if app.state.jwt_verifier is not None else "not_configured",
         }
 
     return {
@@ -68,4 +79,5 @@ def readiness() -> dict[str, str]:
         "stage": "foundation",
         "readiness_scope": "bootstrap_only",
         "dependency_checks": "not_configured",
+        "authentication": "oidc_configured" if app.state.jwt_verifier is not None else "not_configured",
     }

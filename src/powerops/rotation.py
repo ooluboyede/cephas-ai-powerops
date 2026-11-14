@@ -11,7 +11,7 @@ from threading import Lock
 from typing import Protocol
 from uuid import UUID
 
-from powerops.secrets import SecretProvider, SecretProviderError
+from powerops.secrets import SecretProvider
 
 
 class CredentialRotationError(RuntimeError):
@@ -19,7 +19,7 @@ class CredentialRotationError(RuntimeError):
 
 
 class CredentialRotationAuditError(CredentialRotationError):
-    """The pool was switched but the post-switch audit sink failed."""
+    """Rotation outcome could not be durably recorded by the audit sink."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,7 +104,24 @@ class CredentialRotationService:
         with self._lock:
             try:
                 secret = self._provider.get_secret(self._reference, version=version)
-            except SecretProviderError:
+            except Exception:
+                try:
+                    self._audit.record(
+                        RotationAuditEvent(
+                            reference=self._reference,
+                            version=version,
+                            provider=self._provider.provider_name,
+                            tenant_id=self._tenant_id,
+                            business_unit_id=self._business_unit_id,
+                            outcome="failed",
+                            occurred_at=datetime.now(timezone.utc),
+                        )
+                    )
+                except Exception:
+                    raise CredentialRotationAuditError(
+                        "Secret retrieval failed and failure-audit recording also failed; "
+                        "active credentials are unchanged"
+                    ) from None
                 raise CredentialRotationError(
                     "Secret retrieval failed; active database credentials are unchanged"
                 ) from None

@@ -21,8 +21,8 @@ This branch starts from security/0.1.1-gate1i-credential-rotation-eviction and c
 ## Explicit limitations
 
 - OIDC/JWT verification and identity-provider integration are not implemented. The app accepts a principal only when trusted middleware has populated request state; absent middleware returns 401.
-- A concrete PostgreSQL repository adapter and scoped connection-pool/secret-manager lifecycle are not implemented in Gate 0.1. The API returns 503 until one is configured.
-- PostgreSQL migration and RLS checks must execute successfully on supported PostgreSQL versions before the schema gate can be marked passed.
+- A concrete PostgreSQL repository adapter is implemented. Configure DATABASE_URL with a dedicated BU-scoped login and install requirements-postgres.txt. The adapter verifies the authenticated database scope on each operation and opens a fresh connection per operation. A managed connection pool and secret-manager rotation lifecycle remain unimplemented.
+- PostgreSQL migration, repository and RLS checks must execute successfully on supported PostgreSQL versions before the schema gate can be marked passed.
 - No live utility integrations, customer data, model inference, automatic billing action, recovery execution, disconnection or grid-control command is implemented.
 - CI success and PostgreSQL security gate success are separate evidence. Do not infer one from the other.
 

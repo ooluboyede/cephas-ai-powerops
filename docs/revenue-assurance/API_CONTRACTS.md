@@ -11,7 +11,7 @@ Base path: /api/v1/revenue
 - Missing authenticated principal returns HTTP 401.
 - Missing repository/database adapter returns HTTP 503; the service does not silently use an in-memory store or synthetic fallback.
 - Every repository method receives a server-derived tenant/business-unit scope and authenticated subject.
-- The PostgreSQL adapter connects using one BU-scoped database login per configured service instance, verifies powerops_security.resolve_authenticated_scope() for each operation, and fails closed on mismatch. The initial adapter opens a fresh connection per operation; it does not multiplex different database identities through a shared pool. A managed pool and secret-rotation lifecycle remain later hardening work.
+- The PostgreSQL adapter connects using one BU-scoped database login per configured service instance; tenant-wide database logins are not eligible for Revenue Assurance schema grants. It verifies powerops_security.resolve_authenticated_scope() for each operation and fails closed on mismatch. The initial adapter opens a fresh connection per operation; it does not multiplex different database identities through a shared pool. A managed pool and secret-rotation lifecycle remain later hardening work.
 - PostgreSQL RLS in migration 0006 is the final row-level boundary; API filtering is not a substitute.
 
 ## Endpoints

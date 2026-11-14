@@ -1,4 +1,4 @@
-name: PostgreSQL Security Gates 1E–1H
+name: PostgreSQL Security Gates 1E–1I
 
 on:
   pull_request:
@@ -65,3 +65,6 @@ jobs:
 
       - name: Run Gate 1H PgBouncer transaction-pool isolation tests
         run: bash tests/postgresql/run_gate1h_pgbouncer.sh
+
+      - name: Run Gate 1I credential rotation and stale-session fencing tests
+        run: bash tests/postgresql/run_gate1i_credential_rotation.sh

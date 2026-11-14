@@ -139,6 +139,11 @@ class RevenueAssuranceRepository(Protocol):
 
 def get_current_principal(request: Request) -> AuthenticatedPrincipal:
     """Read identity only from trusted auth middleware; never from request headers."""
+    if any(key in request.query_params for key in ("tenant_id", "business_unit_id")):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Tenant and business-unit scope must come from authenticated identity",
+        )
     principal = getattr(request.state, "authenticated_principal", None)
     if not isinstance(principal, AuthenticatedPrincipal):
         raise HTTPException(

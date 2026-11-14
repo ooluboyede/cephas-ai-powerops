@@ -11,7 +11,7 @@ settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
     version=__version__,
-    description="Advisory feeder and transformer intelligence for distribution utilities.",
+    description="Evidence-led utility revenue assurance and distribution-network intelligence.",
 )
 
 

@@ -11,6 +11,7 @@ from threading import Lock
 from typing import Protocol
 from uuid import UUID
 
+from powerops.revenue_assurance import ScopeContext
 from powerops.secrets import SecretProvider
 
 
@@ -36,13 +37,7 @@ class RotationAuditEvent:
 class CredentialRepository(Protocol):
     """Narrow repository contract; implementation owns pool swap and DB identity checks."""
 
-    def rotate_credentials(
-        self,
-        new_dsn: str,
-        *,
-        expected_tenant_id: UUID,
-        expected_business_unit_id: UUID,
-    ) -> None:
+    def rotate_credentials(self, new_dsn: str, scope: ScopeContext) -> None:
         """Validate candidate credentials and replace the scoped pool atomically."""
 
 
@@ -142,8 +137,11 @@ class CredentialRotationService:
             try:
                 self._repository.rotate_credentials(
                     candidate_dsn,
-                    expected_tenant_id=self._tenant_id,
-                    expected_business_unit_id=self._business_unit_id,
+                    ScopeContext(
+                        tenant_id=self._tenant_id,
+                        business_unit_id=self._business_unit_id,
+                        subject="system:credential-rotation",
+                    ),
                 )
             except Exception:
                 # Suppress provider/driver exceptions because some drivers include

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from time import time
 from typing import Any
 from uuid import UUID
 
 import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
 from powerops.auth import AuthenticatedPrincipal, OidcJwtVerifier
@@ -16,9 +18,13 @@ BUSINESS_UNIT_ID = UUID("a1000000-0000-4000-8000-000000000001")
 
 
 class StubJwksClient:
+    def __init__(self, key: Any = "public-key") -> None:
+        self.key = key
+
     def get_signing_key_from_jwt(self, token: str) -> Any:
-        assert token == "signed.jwt.token"
-        return type("SigningKey", (), {"key": "public-key"})()
+        if self.key == "public-key":
+            assert token == "signed.jwt.token"
+        return type("SigningKey", (), {"key": self.key})()
 
 
 class StubVerifier:
@@ -208,3 +214,31 @@ def test_jwks_connection_failure_returns_service_unavailable() -> None:
         assert response.status_code == 503
     finally:
         app.state.jwt_verifier = previous
+
+
+def test_oidc_verifier_cryptographically_checks_rs256_signature() -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    other_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verifier = OidcJwtVerifier(
+        issuer="https://identity.example.com",
+        audience="powerops-api",
+        jwks_url="https://identity.example.com/jwks",
+    )
+    verifier.jwks_client = StubJwksClient(private_key.public_key())  # type: ignore[assignment]
+    now = int(time())
+    claims = {
+        "sub": "oidc-user-123",
+        "iss": "https://identity.example.com",
+        "aud": "powerops-api",
+        "exp": now + 300,
+        "iat": now - 1,
+        "tenant_id": str(TENANT_ID),
+        "business_unit_id": str(BUSINESS_UNIT_ID),
+        "roles": ["revenue_analyst"],
+    }
+    valid_token = jwt.encode(claims, private_key, algorithm="RS256")
+    invalid_token = jwt.encode(claims, other_private_key, algorithm="RS256")
+
+    assert verifier.verify(valid_token).subject == "oidc-user-123"
+    with pytest.raises(jwt.InvalidSignatureError):
+        verifier.verify(invalid_token)

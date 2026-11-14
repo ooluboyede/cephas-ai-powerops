@@ -5,8 +5,8 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from fastapi.testclient import TestClient
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 from powerops.main import app
@@ -206,7 +206,7 @@ def test_create_case_contract(client: TestClient) -> None:
     assert response.json()["status"] == "open"
 
 
-def test_approval_requires_approver_role(client: TestClient) -> None:
+def test_approval_succeeds_with_approver_role(client: TestClient) -> None:
     response = client.post(
         f"/api/v1/revenue/cases/{CASE_ID}/decisions",
         json={"decision": "approve", "reason": "Evidence reviewed and validated."},

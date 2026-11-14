@@ -169,12 +169,6 @@ def test_request_cannot_override_tenant_or_business_unit(client: TestClient) -> 
             "client": ("testclient", 50000),
         }
     )
-    request.state.authenticated_principal = AuthenticatedPrincipal(
-        subject="test-user-01",
-        tenant_id=TENANT_A,
-        business_unit_id=BU_A1,
-        roles=frozenset({"revenue_analyst"}),
-    )
     with pytest.raises(HTTPException) as exc_info:
         get_current_principal(request)
     assert exc_info.value.status_code == 422

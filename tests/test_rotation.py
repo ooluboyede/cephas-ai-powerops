@@ -157,3 +157,14 @@ def test_invalid_dsn_control_characters_rejected() -> None:
     with pytest.raises(CredentialRotationError, match="not a valid database credential"):
         rotation.rotate_to_version("v2")
     assert repository.rotations == []
+
+
+def test_failure_audit_outage_is_not_silently_swallowed() -> None:
+    repository = FakeRepository()
+    repository.fail = True
+    audit = FakeAudit()
+    audit.fail = True
+    rotation, _, _, _ = service(repository=repository, audit=audit)
+    with pytest.raises(CredentialRotationAuditError, match="failure-audit recording also failed"):
+        rotation.rotate_to_version("v2")
+    assert rotation.active_version is None

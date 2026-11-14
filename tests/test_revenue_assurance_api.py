@@ -3,8 +3,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from fastapi.testclient import TestClient
 import pytest
+
+from fastapi.testclient import TestClient
 
 from powerops.main import app
 from powerops.revenue_assurance import (

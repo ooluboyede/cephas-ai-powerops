@@ -299,6 +299,7 @@ class PostgresRevenueAssuranceRepository:
                 SELECT case_status
                 FROM revenue_assurance.investigation_cases
                 WHERE tenant_id = %s AND business_unit_id = %s AND case_id = %s
+                FOR UPDATE
                 """,
                 (scope.tenant_id, scope.business_unit_id, case_id),
             ).fetchone()

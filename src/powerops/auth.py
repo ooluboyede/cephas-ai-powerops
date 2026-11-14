@@ -13,7 +13,7 @@ from uuid import UUID
 
 import jwt
 from fastapi import HTTPException, Request, status
-from jwt import PyJWKClient, PyJWTError
+from jwt import PyJWKClient, PyJWKClientConnectionError, PyJWTError
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,7 +105,7 @@ def get_current_principal(request: Request) -> AuthenticatedPrincipal:
 
     try:
         return verifier.verify(token.strip())
-    except (URLError, TimeoutError):
+    except (PyJWKClientConnectionError, URLError, TimeoutError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Identity provider keys are temporarily unavailable",

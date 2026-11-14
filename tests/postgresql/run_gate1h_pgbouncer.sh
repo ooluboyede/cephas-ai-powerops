@@ -102,7 +102,7 @@ for attempt in $(seq 1 12); do
 done
 
 echo "[Gate 1H] Caller-controlled GUCs cannot alter either pooled identity"
-spoof_a=$(pool_role pwr_gate1h_a1 -At -F '|' -c "SET app.tenant_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'; SELECT session_user, count(*) FROM powerops_data.feeders")
+spoof_a=$(pool_role pwr_gate1h_a1 -At -F '|' -c "SET app.tenant_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'; SELECT session_user, (SELECT count(*) FROM powerops_data.feeders)")
 [[ "$spoof_a" == "pwr_gate1h_a1|1" ]] || {
   echo "FAIL: A1 scope changed through GUC manipulation: $spoof_a" >&2
   exit 1

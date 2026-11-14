@@ -6,6 +6,8 @@ from uuid import UUID, uuid4
 import pytest
 
 from fastapi.testclient import TestClient
+from fastapi import HTTPException
+from starlette.requests import Request
 
 from powerops.main import app
 from powerops.revenue_assurance import (
@@ -148,14 +150,34 @@ def test_list_findings_uses_authenticated_scope(client: TestClient) -> None:
 
 
 def test_request_cannot_override_tenant_or_business_unit(client: TestClient) -> None:
-    response = client.get(
-        "/api/v1/revenue/findings",
-        params={
-            "tenant_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-            "business_unit_id": str(uuid4()),
-        },
+    # Exercise the real dependency directly: the fixture overrides this
+    # dependency for ordinary route tests, which would otherwise bypass it.
+    request = Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/api/v1/revenue/findings",
+            "raw_path": b"/api/v1/revenue/findings",
+            "query_string": (
+                b"tenant_id=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+                b"&business_unit_id=a2000000-0000-4000-8000-000000000002"
+            ),
+            "headers": [],
+            "server": ("testserver", 80),
+            "client": ("testclient", 50000),
+        }
     )
-    assert response.status_code == 422
+    request.state.authenticated_principal = AuthenticatedPrincipal(
+        subject="test-user-01",
+        tenant_id=TENANT_A,
+        business_unit_id=BU_A1,
+        roles=frozenset({"revenue_analyst"}),
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_principal(request)
+    assert exc_info.value.status_code == 422
 
 
 def test_case_payload_rejects_client_supplied_scope(client: TestClient) -> None:

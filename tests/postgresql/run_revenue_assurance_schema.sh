@@ -98,6 +98,19 @@ if role_sql pwr_gate1e_bu_a1 -c "INSERT INTO revenue_assurance.source_batches
   exit 1
 fi
 
+echo "[Revenue Assurance 0.1] Verify runtime logins cannot rewrite source evidence"
+if role_sql pwr_gate1e_bu_a1 -c "UPDATE revenue_assurance.findings SET evidence_summary='tampered'
+    WHERE finding_id='d1000000-0000-4000-8000-000000000001'" >/dev/null 2>&1; then
+  echo "FAIL: runtime finding update unexpectedly succeeded" >&2
+  exit 1
+fi
+
+if role_sql pwr_gate1e_bu_a1 -c "UPDATE revenue_assurance.source_batches SET batch_status='rejected'
+    WHERE batch_id='c1000000-0000-4000-8000-000000000001'" >/dev/null 2>&1; then
+  echo "FAIL: runtime source-batch update unexpectedly succeeded" >&2
+  exit 1
+fi
+
 echo "[Revenue Assurance 0.1] Verify audit rows are append-only"
 if role_sql pwr_gate1e_bu_a1 -c "UPDATE revenue_assurance.audit_events SET action='tampered'
     WHERE event_id='e1000000-0000-4000-8000-000000000001'" >/dev/null 2>&1; then

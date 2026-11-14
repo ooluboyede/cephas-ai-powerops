@@ -97,8 +97,12 @@ class ScopedConnectionPool:
     def connection(self, tenant_id: UUID, business_unit_id: UUID) -> Iterator[Any]:
         pool, connection = self._get_pool_and_connection()
         try:
-            self._verify_scope(connection, tenant_id, business_unit_id)
-            yield connection
+            # A transaction encloses scope verification and the complete unit of
+            # work. It commits on success and rolls back on every exception before
+            # the connection is returned to the pool.
+            with connection.transaction():
+                self._verify_scope(connection, tenant_id, business_unit_id)
+                yield connection
         finally:
             pool.putconn(connection)
 

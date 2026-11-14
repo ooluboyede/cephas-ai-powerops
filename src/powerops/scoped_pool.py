@@ -120,9 +120,10 @@ class ScopedConnectionPool:
         try:
             connection = candidate.getconn(timeout=self._timeout)
             try:
-                self._verify_scope(
-                    connection, expected_tenant_id, expected_business_unit_id
-                )
+                with connection.transaction():
+                    self._verify_scope(
+                        connection, expected_tenant_id, expected_business_unit_id
+                    )
             finally:
                 candidate.putconn(connection)
         except Exception:

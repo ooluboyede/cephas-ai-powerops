@@ -241,7 +241,7 @@ BEGIN
       FROM powerops_security.cluster_identity AS ci
      WHERE ci.singleton;
 
-    SELECT binding.role_oid INTO STRICT v_role_oid
+    SELECT binding.role_oid INTO v_role_oid
       FROM powerops_security.role_scope_binding AS binding
       JOIN pg_catalog.pg_roles AS runtime_role
         ON runtime_role.oid = binding.role_oid
@@ -258,6 +258,11 @@ BEGIN
        AND NOT runtime_role.rolinherit
        AND NOT runtime_role.rolreplication
        AND NOT runtime_role.rolbypassrls;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'only active business-unit-scoped runtime identities may receive Revenue Assurance access'
+            USING ERRCODE = '42501';
+    END IF;
 
     IF EXISTS (
         SELECT 1 FROM pg_catalog.pg_auth_members AS membership

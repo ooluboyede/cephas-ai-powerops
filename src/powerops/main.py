@@ -17,7 +17,12 @@ app = FastAPI(
 
 
 app.state.revenue_assurance_repository = (
-    PostgresRevenueAssuranceRepository(\n        settings.database_url.get_secret_value(),\n        pool_min_size=settings.database_pool_min_size,\n        pool_max_size=settings.database_pool_max_size,\n        pool_timeout=settings.database_pool_timeout_seconds,\n    )
+    PostgresRevenueAssuranceRepository(
+        settings.database_url.get_secret_value(),
+        pool_min_size=settings.database_pool_min_size,
+        pool_max_size=settings.database_pool_max_size,
+        pool_timeout=settings.database_pool_timeout_seconds,
+    )
     if settings.database_url is not None
     else None
 )

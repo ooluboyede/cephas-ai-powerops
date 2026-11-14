@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-import pytest
 from fastapi.testclient import TestClient
+import pytest
 
 from powerops.main import app
 from powerops.revenue_assurance import (

@@ -1,12 +1,7 @@
 name: PowerOps Revenue Assurance Gates 0.1–0.2
 
 on:
-  push:
-    branches:
-      - "security/**"
-  pull_request:
-    branches:
-      - "security/**"
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -5,7 +5,6 @@ from uuid import UUID
 
 import jwt
 import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from powerops.auth import AuthenticatedPrincipal, OidcJwtVerifier
@@ -189,3 +188,23 @@ def test_oidc_settings_accept_https_provider_configuration() -> None:
     )
     assert settings.oidc_issuer == "https://identity.example.com/"
     assert settings.oidc_audience == "powerops-api"
+
+
+def test_jwks_connection_failure_returns_service_unavailable() -> None:
+    from urllib.error import URLError
+
+    class UnavailableVerifier:
+        def verify(self, token: str) -> AuthenticatedPrincipal:
+            raise URLError("identity provider unavailable")
+
+    previous = app.state.jwt_verifier
+    app.state.jwt_verifier = UnavailableVerifier()
+    try:
+        with TestClient(app) as client:
+            response = client.get(
+                "/api/v1/revenue/findings",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+        assert response.status_code == 503
+    finally:
+        app.state.jwt_verifier = previous

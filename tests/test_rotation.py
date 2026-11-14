@@ -5,6 +5,7 @@ from uuid import UUID
 
 import pytest
 
+from powerops.revenue_assurance import ScopeContext
 from powerops.rotation import (
     CredentialRotationAuditError,
     CredentialRotationError,
@@ -49,16 +50,10 @@ class FakeRepository:
         self.rotations: list[tuple[str, UUID, UUID]] = []
         self.fail = False
 
-    def rotate_credentials(
-        self,
-        dsn: str,
-        *,
-        expected_tenant_id: UUID,
-        expected_business_unit_id: UUID,
-    ) -> None:
+    def rotate_credentials(self, dsn: str, scope: ScopeContext) -> None:
         if self.fail:
             raise RuntimeError("driver error included postgresql://candidate-secret")
-        self.rotations.append((dsn, expected_tenant_id, expected_business_unit_id))
+        self.rotations.append((dsn, scope.tenant_id, scope.business_unit_id))
 
 
 class FakeAudit:

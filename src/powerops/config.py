@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
     database_url: SecretStr | None = None
+    database_pool_min_size: int = Field(default=1, ge=1, le=16)
+    database_pool_max_size: int = Field(default=8, ge=1, le=64)
+    database_pool_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
     oidc_issuer: str | None = None
     oidc_audience: str | None = None
     oidc_jwks_url: str | None = None
@@ -29,6 +32,12 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @model_validator(mode="after")
+    def validate_database_pool_configuration(self) -> "Settings":
+        if self.database_pool_max_size < self.database_pool_min_size:
+            raise ValueError("DATABASE_POOL_MAX_SIZE must be >= DATABASE_POOL_MIN_SIZE")
+        return self
 
     @model_validator(mode="after")
     def validate_oidc_configuration(self) -> "Settings":

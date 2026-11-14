@@ -4,8 +4,8 @@ from fastapi import FastAPI, HTTPException
 
 from powerops import __version__
 from powerops.config import get_settings
-from powerops.revenue_assurance import router as revenue_assurance_router
 from powerops.postgres_repository import PostgresRevenueAssuranceRepository
+from powerops.revenue_assurance import router as revenue_assurance_router
 
 settings = get_settings()
 app = FastAPI(
@@ -31,11 +31,10 @@ def liveness() -> dict[str, str]:
 
 @app.get("/health/ready", tags=["operations"])
 def readiness() -> dict[str, str]:
-    """Report bootstrap readiness without implying unimplemented dependencies are healthy.
+    """Report readiness for the configured application dependencies.
 
-    The foundation has no database or utility connectors to probe. When required
-    dependencies are introduced, this endpoint must check them and return a
-    non-2xx response whenever a required dependency is unavailable.
+    With no DATABASE_URL, readiness is explicitly limited to bootstrap. With a
+    configured DSN, verify the connection and that the database login is BU-scoped.
     """
     if settings.database_url is not None:
         try:

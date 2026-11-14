@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from powerops import __version__
 from powerops.config import get_settings
+from powerops.revenue_assurance import router as revenue_assurance_router
 
 settings = get_settings()
 app = FastAPI(
@@ -11,6 +12,9 @@ app = FastAPI(
     version=__version__,
     description="Advisory feeder and transformer intelligence for distribution utilities.",
 )
+
+
+app.include_router(revenue_assurance_router)
 
 
 @app.get("/health/live", tags=["operations"])

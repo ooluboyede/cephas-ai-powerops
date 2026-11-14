@@ -6,24 +6,15 @@ by an HTTP caller.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Protocol, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
-
-@dataclass(frozen=True, slots=True)
-class AuthenticatedPrincipal:
-    """Identity populated only by a trusted authentication integration."""
-
-    subject: str
-    tenant_id: UUID
-    business_unit_id: UUID
-    roles: frozenset[str]
+from powerops.auth import AuthenticatedPrincipal, get_current_principal
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,23 +126,6 @@ class RevenueAssuranceRepository(Protocol):
     def record_recovery_outcome(
         self, scope: ScopeContext, case_id: UUID, payload: RecoveryOutcomeCreate
     ) -> RecoveryOutcomeRead | None: ...
-
-
-def get_current_principal(request: Request) -> AuthenticatedPrincipal:
-    """Read identity only from trusted auth middleware; never from request headers."""
-    if any(key in request.query_params for key in ("tenant_id", "business_unit_id")):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Tenant and business-unit scope must come from authenticated identity",
-        )
-    principal = getattr(request.state, "authenticated_principal", None)
-    if not isinstance(principal, AuthenticatedPrincipal):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authenticated identity is required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return principal
 
 
 def get_repository(request: Request) -> RevenueAssuranceRepository:

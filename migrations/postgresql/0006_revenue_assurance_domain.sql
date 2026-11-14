@@ -196,7 +196,7 @@ SECURITY INVOKER
 SET search_path = pg_catalog, revenue_assurance
 AS $function$
 BEGIN
-    RAISE EXCEPTION 'revenue assurance audit events are append-only'
+    RAISE EXCEPTION 'revenue assurance evidence records are append-only'
         USING ERRCODE = '42501';
 END
 $function$;
@@ -204,6 +204,14 @@ $function$;
 REVOKE ALL ON FUNCTION revenue_assurance.reject_audit_mutation() FROM PUBLIC;
 CREATE TRIGGER audit_events_no_update
     BEFORE UPDATE OR DELETE ON revenue_assurance.audit_events
+    FOR EACH ROW EXECUTE FUNCTION revenue_assurance.reject_audit_mutation();
+
+CREATE TRIGGER case_decisions_no_update
+    BEFORE UPDATE OR DELETE ON revenue_assurance.case_decisions
+    FOR EACH ROW EXECUTE FUNCTION revenue_assurance.reject_audit_mutation();
+
+CREATE TRIGGER recovery_outcomes_no_update
+    BEFORE UPDATE OR DELETE ON revenue_assurance.recovery_outcomes
     FOR EACH ROW EXECUTE FUNCTION revenue_assurance.reject_audit_mutation();
 
 
@@ -243,7 +251,19 @@ BEGIN
        AND binding.active
        AND runtime_role.rolcanlogin
        AND NOT runtime_role.rolsuper
+       AND NOT runtime_role.rolcreatedb
+       AND NOT runtime_role.rolcreaterole
+       AND NOT runtime_role.rolinherit
+       AND NOT runtime_role.rolreplication
        AND NOT runtime_role.rolbypassrls;
+
+    IF EXISTS (
+        SELECT 1 FROM pg_catalog.pg_auth_members AS membership
+         WHERE membership.member = v_role_oid OR membership.roleid = v_role_oid
+    ) THEN
+        RAISE EXCEPTION 'runtime identity with role memberships cannot receive domain access'
+            USING ERRCODE = '42501';
+    END IF;
 
     IF EXISTS (
         SELECT 1 FROM powerops_security.retired_role_identity AS retired

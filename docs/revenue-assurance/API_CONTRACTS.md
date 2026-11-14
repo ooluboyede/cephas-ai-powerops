@@ -42,3 +42,19 @@ Base path: /api/v1/revenue
 - 503: repository/database adapter is not configured.
 
 FastAPI exposes generated API documentation at /docs and /openapi.json. These endpoints document the API; they do not imply production authentication or persistence is configured.
+
+## OIDC access-token contract
+
+The API accepts only bearer access tokens verified against the configured JWKS endpoint.
+The initial provider contract is RS256 and requires exact issuer and API audience validation,
+expiry and issued-at checks, and the following signed claims:
+
+- `sub`: stable user/service subject
+- `tenant_id`: tenant UUID
+- `business_unit_id`: business-unit UUID
+- `roles`: non-empty array of role strings understood by the PowerOps API
+
+Configure `OIDC_ISSUER`, `OIDC_AUDIENCE` and `OIDC_JWKS_URL` together. Issuer and JWKS
+URLs must use HTTPS outside localhost development. JWKS keys are cached for five minutes.
+Invalid tokens fail with 401; unavailable OIDC configuration or key service fails closed with
+503. The verifier does not accept scope from request headers, query parameters or request bodies.

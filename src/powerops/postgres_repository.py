@@ -289,7 +289,7 @@ class PostgresRevenueAssuranceRepository:
     def record_recovery_outcome(
         self,
         scope: ScopeContext,
-        case_id: Any,
+        case_id: UUID,
         payload: RecoveryOutcomeCreate,
     ) -> RecoveryOutcomeRead | None:
         outcome_id = uuid4()

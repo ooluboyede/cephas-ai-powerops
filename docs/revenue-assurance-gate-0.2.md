@@ -41,7 +41,8 @@ For multiple business units, deploy separate service instances (or independently
 
 ## Explicit limitations
 
-- GitHub Actions are paused while repository Actions minutes/payment are unavailable. No workflow was triggered for this gate.
+- GitHub Actions minutes/payment access are unavailable. During branch updates, automatic push/pull-request events started several workflows before triggers were paused; all affected runs ended with zero job steps. No tests or build commands executed.
+- The two relevant security workflows are now restricted to manual `workflow_dispatch` triggers. Re-enable/dispatch them only after Actions minutes are restored.
 - No Python, lint, type-check, or live PostgreSQL test result is claimed until the workflows can execute.
 - No cloud secret-manager adapter, automated rotation scheduler, PgBouncer/managed-pooler validation, HA/failover test, customer identity provider, customer dataset, or production certification is included.
 - The pool is per service instance and per BU login; multi-BU multiplexing is intentionally unsupported.

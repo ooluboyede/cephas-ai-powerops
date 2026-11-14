@@ -71,7 +71,9 @@ def readiness() -> dict[str, str]:
             "stage": "database_configured",
             "readiness_scope": "postgresql_business_unit_scope",
             "dependency_checks": "postgresql_scope_verified",
-            "authentication": "oidc_configured" if app.state.jwt_verifier is not None else "not_configured",
+            "authentication": (
+                "oidc_configured" if app.state.jwt_verifier is not None else "not_configured"
+            ),
         }
 
     return {

@@ -17,7 +17,7 @@ app = FastAPI(
 
 
 app.state.revenue_assurance_repository = (
-    PostgresRevenueAssuranceRepository(settings.database_url.get_secret_value())
+    PostgresRevenueAssuranceRepository(\n        settings.database_url.get_secret_value(),\n        pool_min_size=settings.database_pool_min_size,\n        pool_max_size=settings.database_pool_max_size,\n        pool_timeout=settings.database_pool_timeout_seconds,\n    )
     if settings.database_url is not None
     else None
 )
@@ -74,3 +74,13 @@ def readiness() -> dict[str, str]:
         "readiness_scope": "oidc_and_postgresql_business_unit_scope",
         "dependency_checks": "oidc_configured_and_postgresql_scope_verified",
     }
+
+
+def _close_database_pool() -> None:
+    """Drain the application-owned PostgreSQL pool on process shutdown."""
+    repository = app.state.revenue_assurance_repository
+    if isinstance(repository, PostgresRevenueAssuranceRepository):
+        repository.close()
+
+
+app.add_event_handler("shutdown", _close_database_pool)

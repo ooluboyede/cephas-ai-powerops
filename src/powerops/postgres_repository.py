@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 
+from powerops.scoped_pool import ScopedConnectionPool
 from powerops.revenue_assurance import (
     CaseCreate,
     CaseRead,
@@ -31,35 +32,36 @@ from powerops.revenue_assurance import (
 class PostgresRevenueAssuranceRepository:
     """Synchronous, per-operation PostgreSQL access for one BU identity."""
 
-    def __init__(self, dsn: str) -> None:
-        if not dsn.strip():
-            raise ValueError("A PostgreSQL DSN is required")
-        self._dsn = dsn
+    def __init__(
+        self,
+        dsn: str,
+        *,
+        pool_min_size: int = 1,
+        pool_max_size: int = 8,
+        pool_timeout: float = 5.0,
+    ) -> None:
+        self._pool = ScopedConnectionPool(
+            dsn,
+            min_size=pool_min_size,
+            max_size=pool_max_size,
+            timeout=pool_timeout,
+        )
+
+    def close(self) -> None:
+        """Close and drain the service-instance pool during shutdown."""
+        self._pool.close()
+
+    def rotate_credentials(self, new_dsn: str, scope: ScopeContext) -> None:
+        """Rotate one BU login only after the replacement identity is verified."""
+        self._pool.rotate_credentials(
+            new_dsn,
+            expected_tenant_id=scope.tenant_id,
+            expected_business_unit_id=scope.business_unit_id,
+        )
 
     @contextmanager
     def _connection(self, scope: ScopeContext) -> Iterator[Any]:
-        # Import lazily so deployments without DATABASE_URL do not need to load
-        # the optional PostgreSQL driver merely to serve liveness endpoints.
-        import psycopg
-        from psycopg.rows import dict_row
-
-        with psycopg.connect(self._dsn, row_factory=dict_row) as connection:
-            identity = connection.execute(
-                """
-                SELECT tenant_id, scope_kind, business_unit_id
-                FROM powerops_security.resolve_authenticated_scope()
-                """
-            ).fetchone()
-            if (
-                identity is None
-                or identity["scope_kind"] != "business_unit"
-                or identity["tenant_id"] != scope.tenant_id
-                or identity["business_unit_id"] != scope.business_unit_id
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Database login scope does not match authenticated business unit",
-                )
+        with self._pool.connection(scope.tenant_id, scope.business_unit_id) as connection:
             yield connection
 
     @staticmethod

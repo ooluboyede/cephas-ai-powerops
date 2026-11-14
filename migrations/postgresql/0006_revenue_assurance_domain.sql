@@ -232,7 +232,7 @@ DECLARE
 BEGIN
     IF p_role_name IS NULL
        OR length(p_role_name::text) > 63
-       OR p_role_name::text !~ '^pwr_[a-z0-9_]{1,40}
+       OR p_role_name::text !~ '^pwr_[a-z0-9_]{1,40}$' THEN
         RAISE EXCEPTION 'runtime role name is outside the approved format'
             USING ERRCODE = '22023';
     END IF;

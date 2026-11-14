@@ -206,4 +206,69 @@ CREATE TRIGGER audit_events_no_update
     BEFORE UPDATE OR DELETE ON revenue_assurance.audit_events
     FOR EACH ROW EXECUTE FUNCTION revenue_assurance.reject_audit_mutation();
 
+
+-- Explicitly extend the approved runtime identity after a new domain schema is
+-- installed. This function grants access only to an active, database-bound
+-- login identity; it does not accept caller-supplied tenant or BU identifiers.
+CREATE OR REPLACE FUNCTION powerops_security.grant_revenue_assurance_access(
+    p_role_name name
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, powerops_security
+AS $function$
+DECLARE
+    v_cluster_id uuid;
+    v_role_oid oid;
+BEGIN
+    IF p_role_name IS NULL
+       OR length(p_role_name::text) > 63
+       OR p_role_name::text !~ '^pwr_[a-z0-9_]{1,40} THEN
+        RAISE EXCEPTION 'runtime role name is outside the approved format'
+            USING ERRCODE = '22023';
+    END IF;
+
+    SELECT ci.cluster_id INTO STRICT v_cluster_id
+      FROM powerops_security.cluster_identity AS ci
+     WHERE ci.singleton;
+
+    SELECT binding.role_oid INTO STRICT v_role_oid
+      FROM powerops_security.role_scope_binding AS binding
+      JOIN pg_catalog.pg_roles AS runtime_role
+        ON runtime_role.oid = binding.role_oid
+       AND runtime_role.rolname = binding.role_name
+     WHERE binding.cluster_id = v_cluster_id
+       AND binding.role_name = p_role_name
+       AND binding.active
+       AND runtime_role.rolcanlogin
+       AND NOT runtime_role.rolsuper
+       AND NOT runtime_role.rolbypassrls;
+
+    IF EXISTS (
+        SELECT 1 FROM powerops_security.retired_role_identity AS retired
+         WHERE retired.cluster_id = v_cluster_id
+           AND (retired.role_oid = v_role_oid OR retired.role_name = p_role_name)
+    ) THEN
+        RAISE EXCEPTION 'retired runtime identity cannot receive domain access'
+            USING ERRCODE = '42501';
+    END IF;
+
+    EXECUTE pg_catalog.format(
+        'GRANT USAGE ON SCHEMA revenue_assurance TO %I', p_role_name
+    );
+    EXECUTE pg_catalog.format(
+        'GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA revenue_assurance TO %I',
+        p_role_name
+    );
+END
+$function$;
+
+ALTER FUNCTION powerops_security.grant_revenue_assurance_access(name)
+    OWNER TO powerops_provisioner;
+REVOKE ALL ON FUNCTION powerops_security.grant_revenue_assurance_access(name)
+    FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION powerops_security.grant_revenue_assurance_access(name)
+    TO powerops_provisioner;
+
 COMMIT;

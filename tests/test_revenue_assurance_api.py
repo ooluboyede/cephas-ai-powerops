@@ -154,13 +154,7 @@ def test_request_cannot_override_tenant_or_business_unit(client: TestClient) -> 
             "business_unit_id": str(uuid4()),
         },
     )
-    assert response.status_code == 200
-    assert response.json()["total"] == 1
-    assert app.state.revenue_assurance_repository.last_scope == ScopeContext(
-        tenant_id=TENANT_A,
-        business_unit_id=BU_A1,
-        subject="test-user-01",
-    )
+    assert response.status_code == 422
 
 
 def test_case_payload_rejects_client_supplied_scope(client: TestClient) -> None:

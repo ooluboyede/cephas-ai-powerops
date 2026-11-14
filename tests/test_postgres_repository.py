@@ -18,6 +18,7 @@ from powerops.revenue_assurance import (
 )
 
 DATABASE_URL = os.environ.get("POWEROPS_TEST_DATABASE_URL")
+ADMIN_DATABASE_URL = os.environ.get("POWEROPS_TEST_ADMIN_DATABASE_URL")
 pytestmark = pytest.mark.skipif(
     not DATABASE_URL,
     reason="POWEROPS_TEST_DATABASE_URL is only configured in PostgreSQL integration CI",
@@ -106,7 +107,10 @@ def test_postgres_repository_finding_case_decision_and_recovery_roundtrip() -> N
     assert outcome.outcome == "verified"
     assert outcome.amount == Decimal("1000.2500")
 
-    with psycopg.connect(DATABASE_URL) as connection:
+    # Use the migration administrator here so the append-only triggers are
+    # exercised directly rather than merely observing runtime GRANT denial.
+    assert ADMIN_DATABASE_URL is not None
+    with psycopg.connect(ADMIN_DATABASE_URL) as connection:
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             connection.execute(
                 """
@@ -116,7 +120,7 @@ def test_postgres_repository_finding_case_decision_and_recovery_roundtrip() -> N
                 """,
                 (decision.decision_id,),
             )
-    with psycopg.connect(DATABASE_URL) as connection:
+    with psycopg.connect(ADMIN_DATABASE_URL) as connection:
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             connection.execute(
                 """

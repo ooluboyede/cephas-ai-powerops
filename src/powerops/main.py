@@ -27,7 +27,11 @@ app.state.jwt_verifier = (
         audience=settings.oidc_audience,
         jwks_url=settings.oidc_jwks_url,
     )
-    if settings.oidc_issuer and settings.oidc_audience and settings.oidc_jwks_url
+    if (
+        settings.oidc_issuer is not None
+        and settings.oidc_audience is not None
+        and settings.oidc_jwks_url is not None
+    )
     else None
 )
 app.include_router(revenue_assurance_router)

@@ -139,6 +139,11 @@ def test_list_findings_uses_authenticated_scope(client: TestClient) -> None:
     response = client.get("/api/v1/revenue/findings?category=billing_gap")
     assert response.status_code == 200
     assert response.json()["total"] == 1
+    assert app.state.revenue_assurance_repository.last_scope == ScopeContext(
+        tenant_id=TENANT_A,
+        business_unit_id=BU_A1,
+        subject="test-user-01",
+    )
 
 
 def test_request_cannot_override_tenant_or_business_unit(client: TestClient) -> None:
@@ -151,6 +156,11 @@ def test_request_cannot_override_tenant_or_business_unit(client: TestClient) -> 
     )
     assert response.status_code == 200
     assert response.json()["total"] == 1
+    assert app.state.revenue_assurance_repository.last_scope == ScopeContext(
+        tenant_id=TENANT_A,
+        business_unit_id=BU_A1,
+        subject="test-user-01",
+    )
 
 
 def test_case_payload_rejects_client_supplied_scope(client: TestClient) -> None:
@@ -216,3 +226,18 @@ def test_missing_repository_fails_closed(client: TestClient) -> None:
     app.state.revenue_assurance_repository = None
     response = client.get("/api/v1/revenue/findings")
     assert response.status_code == 503
+
+
+
+def test_approval_is_denied_without_approver_role(client: TestClient) -> None:
+    app.dependency_overrides[get_current_principal] = lambda: AuthenticatedPrincipal(
+        subject="analyst-01",
+        tenant_id=TENANT_A,
+        business_unit_id=BU_A1,
+        roles=frozenset({"revenue_analyst"}),
+    )
+    response = client.post(
+        f"/api/v1/revenue/cases/{CASE_ID}/decisions",
+        json={"decision": "approve", "reason": "Evidence reviewed and validated."},
+    )
+    assert response.status_code == 403

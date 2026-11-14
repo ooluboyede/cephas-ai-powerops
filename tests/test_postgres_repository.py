@@ -4,6 +4,7 @@ import os
 from decimal import Decimal
 from uuid import UUID
 
+import psycopg
 import pytest
 
 from fastapi import HTTPException
@@ -93,6 +94,27 @@ def test_postgres_repository_finding_case_decision_and_recovery_roundtrip() -> N
     assert outcome is not None
     assert outcome.outcome == "verified"
     assert outcome.amount == Decimal("1000.2500")
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            connection.execute(
+                """
+                UPDATE revenue_assurance.case_decisions
+                SET reason = 'tampered'
+                WHERE decision_id = %s
+                """,
+                (decision.decision_id,),
+            )
+    with psycopg.connect(DATABASE_URL) as connection:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            connection.execute(
+                """
+                UPDATE revenue_assurance.recovery_outcomes
+                SET evidence_reference = 'tampered'
+                WHERE outcome_id = %s
+                """,
+                (outcome.outcome_id,),
+            )
 
 
 def test_database_scope_mismatch_is_denied() -> None:

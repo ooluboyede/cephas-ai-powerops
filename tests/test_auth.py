@@ -155,3 +155,37 @@ def test_tenant_scope_query_override_is_rejected_even_with_bearer() -> None:
         assert response.status_code == 422
     finally:
         app.state.jwt_verifier = previous
+
+
+def test_oidc_settings_must_be_configured_as_a_complete_set() -> None:
+    from pydantic import ValidationError
+
+    from powerops.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(oidc_issuer="https://identity.example.com")
+
+
+def test_oidc_settings_reject_insecure_nonlocal_urls() -> None:
+    from pydantic import ValidationError
+
+    from powerops.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(
+            oidc_issuer="http://identity.example.com",
+            oidc_audience="powerops-api",
+            oidc_jwks_url="http://identity.example.com/jwks",
+        )
+
+
+def test_oidc_settings_accept_https_provider_configuration() -> None:
+    from powerops.config import Settings
+
+    settings = Settings(
+        oidc_issuer="https://identity.example.com/",
+        oidc_audience="powerops-api",
+        oidc_jwks_url="https://identity.example.com/.well-known/jwks.json",
+    )
+    assert settings.oidc_issuer == "https://identity.example.com/"
+    assert settings.oidc_audience == "powerops-api"

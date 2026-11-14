@@ -87,7 +87,7 @@ fi
 
 assert_scope() {
   local role="$1" expected="$2" actual
-  actual=$(pool_role "$role" -At -F '|' -c "SELECT session_user, count(*) FROM powerops_data.feeders")
+  actual=$(pool_role "$role" -At -F '|' -c "SELECT session_user, (SELECT count(*) FROM powerops_data.feeders)")
   [[ "$actual" == "$role|$expected" ]] || {
     echo "FAIL: expected $role|$expected through PgBouncer, received: $actual" >&2
     exit 1

@@ -249,6 +249,8 @@ BEGIN
      WHERE binding.cluster_id = v_cluster_id
        AND binding.role_name = p_role_name
        AND binding.active
+       AND binding.scope_kind = 'business_unit'
+       AND binding.business_unit_id IS NOT NULL
        AND runtime_role.rolcanlogin
        AND NOT runtime_role.rolsuper
        AND NOT runtime_role.rolcreatedb

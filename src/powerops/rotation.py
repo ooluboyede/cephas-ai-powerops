@@ -6,7 +6,7 @@ calls rotate_to_version() when its secret provider publishes an approved version
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from threading import Lock
 from typing import Protocol
 from uuid import UUID
@@ -113,7 +113,7 @@ class CredentialRotationService:
                             tenant_id=self._tenant_id,
                             business_unit_id=self._business_unit_id,
                             outcome="failed",
-                            occurred_at=datetime.now(timezone.utc),
+                            occurred_at=datetime.now(UTC),
                         )
                     )
                 except Exception:

@@ -268,10 +268,6 @@ def record_recovery_outcome(
     principal: AuthenticatedPrincipal = Depends(get_current_principal),
     repository: RevenueAssuranceRepository = Depends(get_repository),
 ) -> RecoveryOutcomeRead:
-    if payload.outcome == "verified":
-        _require_any_role(principal, "finance_verifier", "revenue_admin")
-    else:
-        _require_any_role(principal, "finance_operator", "finance_verifier", "revenue_admin")
     _require_any_role(principal, "finance_operator", "revenue_admin")
     outcome = repository.record_recovery_outcome(_scope(principal), case_id, payload)
     if outcome is None:

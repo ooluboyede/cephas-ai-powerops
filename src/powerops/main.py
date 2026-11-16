@@ -1,5 +1,8 @@
 """HTTP application entry point."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 
 from powerops import __version__
@@ -9,10 +12,22 @@ from powerops.postgres_repository import PostgresRevenueAssuranceRepository
 from powerops.revenue_assurance import router as revenue_assurance_router
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Drain application-owned resources when the ASGI application shuts down."""
+    try:
+        yield
+    finally:
+        _close_database_pool()
+
+
 app = FastAPI(
     title=settings.app_name,
     version=__version__,
     description="Evidence-led utility revenue assurance and distribution-network intelligence.",
+    lifespan=lifespan,
 )
 
 
@@ -98,6 +113,3 @@ def _close_database_pool() -> None:
     repository = app.state.revenue_assurance_repository
     if isinstance(repository, PostgresRevenueAssuranceRepository):
         repository.close()
-
-
-app.add_event_handler("shutdown", _close_database_pool)

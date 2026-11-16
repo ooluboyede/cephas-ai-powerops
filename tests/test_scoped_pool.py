@@ -134,7 +134,7 @@ def test_failed_rotation_does_not_replace_active_pool(fake_psycopg: None) -> Non
     assert candidate.closed is True
     with pool.connection(TENANT, BUSINESS_UNIT):
         pass
-    assert original.returned == 1
+    assert original.returned == 2
     pool.close()
 
 

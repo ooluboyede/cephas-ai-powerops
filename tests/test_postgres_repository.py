@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 import pytest
@@ -117,6 +117,29 @@ def test_postgres_repository_finding_case_decision_and_recovery_roundtrip() -> N
             ),
         )
     assert same_actor.value.status_code == 409
+
+    # Bypass the application service and prove the database trigger independently
+    # rejects a direct SQL attempt by the original recorder.
+    assert ADMIN_DATABASE_URL is not None
+    with psycopg.connect(ADMIN_DATABASE_URL) as connection:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            connection.execute(
+                """
+                INSERT INTO revenue_assurance.recovery_verifications
+                    (tenant_id, business_unit_id, verification_id, outcome_id,
+                     verifier_subject, evidence_reference, reason)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    TENANT_A,
+                    BU_A1,
+                    uuid4(),
+                    outcome.outcome_id,
+                    finance.subject,
+                    "same-actor-direct-sql",
+                    "Direct SQL self-verification must be rejected.",
+                ),
+            )
 
     verifier = ScopeContext(TENANT_A, BU_A1, "independent-verifier-02")
     verification = repository.verify_recovery_outcome(

@@ -27,7 +27,8 @@ for migration in \
   migrations/postgresql/0002_scope_identity.sql \
   migrations/postgresql/0003_scope_login_lifecycle.sql \
   migrations/postgresql/0004_row_scope_predicate.sql \
-  migrations/postgresql/0005_operational_schema_rls.sql
+  migrations/postgresql/0005_operational_schema_rls.sql \
+  migrations/postgresql/0007_runtime_role_membership_fence.sql
 do
   echo "Applying $migration"
   psql_admin -f "$migration"

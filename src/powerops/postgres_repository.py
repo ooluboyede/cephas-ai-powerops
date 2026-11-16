@@ -15,7 +15,6 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 
-from powerops.scoped_pool import ScopedConnectionPool
 from powerops.revenue_assurance import (
     CaseCreate,
     CaseRead,
@@ -27,6 +26,7 @@ from powerops.revenue_assurance import (
     RecoveryOutcomeRead,
     ScopeContext,
 )
+from powerops.scoped_pool import ScopedConnectionPool
 
 
 class PostgresRevenueAssuranceRepository:

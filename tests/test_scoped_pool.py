@@ -119,6 +119,9 @@ def test_scope_mismatch_rolls_back_and_returns_connection(fake_psycopg: None) ->
 
 def test_failed_rotation_does_not_replace_active_pool(fake_psycopg: None) -> None:
     pool = ScopedConnectionPool("bu-a-dsn")
+    # Establish the original pool first; a failed candidate must not replace it.
+    with pool.connection(TENANT, BUSINESS_UNIT):
+        pass
     with pytest.raises(HTTPException) as error:
         pool.rotate_credentials(
             "wrong-bu-dsn",

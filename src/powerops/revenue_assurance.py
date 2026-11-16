@@ -87,8 +87,26 @@ class RecoveryOutcomeCreate(BaseModel):
 
     amount: Decimal = Field(gt=0, max_digits=20, decimal_places=4)
     currency: str = Field(pattern=r"^[A-Z]{3}$")
-    outcome: str = Field(pattern=r"^(reported|verified|reversed|disputed)$")
+    outcome: str = Field(pattern=r"^(reported|reversed|disputed)$")
     evidence_reference: str = Field(min_length=3, max_length=240)
+
+
+class RecoveryVerificationCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_reference: str = Field(min_length=3, max_length=240)
+    reason: str = Field(min_length=10, max_length=2000)
+
+
+class RecoveryVerificationRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    verification_id: UUID
+    outcome_id: UUID
+    verifier_subject: str
+    evidence_reference: str
+    reason: str
+    verified_at: datetime
 
 
 class RecoveryOutcomeRead(BaseModel):
@@ -127,6 +145,10 @@ class RevenueAssuranceRepository(Protocol):
     def record_recovery_outcome(
         self, scope: ScopeContext, case_id: UUID, payload: RecoveryOutcomeCreate
     ) -> RecoveryOutcomeRead | None: ...
+
+    def verify_recovery_outcome(
+        self, scope: ScopeContext, outcome_id: UUID, payload: RecoveryVerificationCreate
+    ) -> RecoveryVerificationRead | None: ...
 
 
 def get_repository(request: Request) -> RevenueAssuranceRepository:
@@ -250,7 +272,28 @@ def record_recovery_outcome(
         _require_any_role(principal, "finance_verifier", "revenue_admin")
     else:
         _require_any_role(principal, "finance_operator", "finance_verifier", "revenue_admin")
+    _require_any_role(principal, "finance_operator", "revenue_admin")
     outcome = repository.record_recovery_outcome(_scope(principal), case_id, payload)
     if outcome is None:
         raise HTTPException(status_code=404, detail="Investigation case not found")
     return outcome
+
+
+@router.post(
+    "/recovery-outcomes/{outcome_id}/verification",
+    response_model=RecoveryVerificationRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def verify_recovery_outcome(
+    outcome_id: UUID,
+    payload: RecoveryVerificationCreate,
+    principal: AuthenticatedPrincipal = Depends(get_current_principal),
+    repository: RevenueAssuranceRepository = Depends(get_repository),
+) -> RecoveryVerificationRead:
+    _require_any_role(principal, "finance_verifier", "revenue_admin")
+    verification = repository.verify_recovery_outcome(
+        _scope(principal), outcome_id, payload
+    )
+    if verification is None:
+        raise HTTPException(status_code=404, detail="Recovery outcome not found")
+    return verification

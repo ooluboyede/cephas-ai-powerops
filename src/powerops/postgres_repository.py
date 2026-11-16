@@ -24,6 +24,8 @@ from powerops.revenue_assurance import (
     FindingRead,
     RecoveryOutcomeCreate,
     RecoveryOutcomeRead,
+    RecoveryVerificationCreate,
+    RecoveryVerificationRead,
     ScopeContext,
 )
 from powerops.scoped_pool import ScopedConnectionPool
@@ -320,11 +322,8 @@ class PostgresRevenueAssuranceRepository:
                 """
                 INSERT INTO revenue_assurance.recovery_outcomes
                     (tenant_id, business_unit_id, outcome_id, case_id, amount,
-                     currency, outcome, evidence_reference, recorded_by,
-                     verified_by, verified_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    CASE WHEN %s = 'verified' THEN %s ELSE NULL END,
-                    CASE WHEN %s = 'verified' THEN now() ELSE NULL END)
+                     currency, outcome, evidence_reference, recorded_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING outcome_id, case_id, amount, currency, outcome,
                           recorded_by, recorded_at
                 """,
@@ -338,9 +337,6 @@ class PostgresRevenueAssuranceRepository:
                     payload.outcome,
                     payload.evidence_reference,
                     scope.subject,
-                    payload.outcome,
-                    scope.subject,
-                    payload.outcome,
                 ),
             ).fetchone()
             self._append_audit(
@@ -364,4 +360,64 @@ class PostgresRevenueAssuranceRepository:
             outcome=row["outcome"],
             recorded_by=row["recorded_by"],
             recorded_at=row["recorded_at"],
+        )
+
+    def verify_recovery_outcome(
+        self,
+        scope: ScopeContext,
+        outcome_id: UUID,
+        payload: RecoveryVerificationCreate,
+    ) -> RecoveryVerificationRead | None:
+        verification_id = uuid4()
+        with self._connection(scope) as connection:
+            outcome = connection.execute(
+                """
+                SELECT recorded_by
+                FROM revenue_assurance.recovery_outcomes
+                WHERE tenant_id = %s AND business_unit_id = %s AND outcome_id = %s
+                FOR UPDATE
+                """,
+                (scope.tenant_id, scope.business_unit_id, outcome_id),
+            ).fetchone()
+            if outcome is None:
+                return None
+            if outcome["recorded_by"] == scope.subject:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Maker-checker control: recovery recorder cannot verify the same outcome",
+                )
+            row = connection.execute(
+                """
+                INSERT INTO revenue_assurance.recovery_verifications
+                    (tenant_id, business_unit_id, verification_id, outcome_id,
+                     verifier_subject, evidence_reference, reason)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING verification_id, outcome_id, verifier_subject,
+                          evidence_reference, reason, verified_at
+                """,
+                (
+                    scope.tenant_id,
+                    scope.business_unit_id,
+                    verification_id,
+                    outcome_id,
+                    scope.subject,
+                    payload.evidence_reference,
+                    payload.reason,
+                ),
+            ).fetchone()
+            self._append_audit(
+                connection,
+                scope,
+                action="recovery.outcome_verified",
+                entity_type="recovery_outcome",
+                entity_id=str(outcome_id),
+                event_data={"verification_id": str(verification_id)},
+            )
+        return RecoveryVerificationRead(
+            verification_id=row["verification_id"],
+            outcome_id=row["outcome_id"],
+            verifier_subject=row["verifier_subject"],
+            evidence_reference=row["evidence_reference"],
+            reason=row["reason"],
+            verified_at=row["verified_at"],
         )

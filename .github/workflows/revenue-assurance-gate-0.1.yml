@@ -7,6 +7,12 @@ on:
       - security/revenue-assurance-gate-0.1
     paths:
       - .github/workflows/revenue-assurance-gate-0.1.yml
+      - src/**
+      - tests/**
+      - migrations/**
+      - pyproject.toml
+      - uv.lock
+      - requirements-*.txt
 
 permissions:
   contents: read

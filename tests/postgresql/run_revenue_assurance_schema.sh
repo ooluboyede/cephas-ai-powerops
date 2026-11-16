@@ -18,8 +18,9 @@ role_sql() {
     -h "$PGHOST" -p "$PGPORT" -U "$role" -d "$PGDATABASE" "$@"
 }
 
-echo "[Revenue Assurance 0.1] Apply additive domain migration"
+echo "[Revenue Assurance 0.1] Apply additive domain migrations"
 admin -f migrations/postgresql/0006_revenue_assurance_domain.sql
+admin -f migrations/postgresql/0008_recovery_verification_separation.sql
 
 echo "[Revenue Assurance 0.1] Grant the new schema to existing active scoped test logins"
 admin <<'SQL'

@@ -384,7 +384,10 @@ class PostgresRevenueAssuranceRepository:
             if outcome["recorded_by"] == scope.subject:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="Maker-checker control: recovery recorder cannot verify the same outcome",
+                    detail=(
+                        "Maker-checker control: recovery recorder cannot verify "
+                        "the same outcome"
+                    ),
                 )
             row = connection.execute(
                 """

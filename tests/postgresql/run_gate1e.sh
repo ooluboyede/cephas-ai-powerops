@@ -135,9 +135,9 @@ SELECT rolname || ':' || rolcanlogin || ':' || rolsuper || ':' ||
 FROM pg_catalog.pg_roles
 WHERE rolname LIKE 'pwr_gate1e_%'
 ORDER BY rolname" | while IFS=: read -r role canlogin super createdb createrole inherit replication bypassrls; do
-  [[ "$canlogin" == "t" && "$super" == "f" && "$createdb" == "f" &&
-     "$createrole" == "f" && "$inherit" == "f" && "$replication" == "f" &&
-     "$bypassrls" == "f" ]] || {
+  [[ "$canlogin" == "true" && "$super" == "false" && "$createdb" == "false" &&
+     "$createrole" == "false" && "$inherit" == "false" && "$replication" == "false" &&
+     "$bypassrls" == "false" ]] || {
        echo "Unsafe runtime role attributes: $role" >&2
        exit 1
      }

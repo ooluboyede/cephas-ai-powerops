@@ -264,11 +264,36 @@ BEGIN
             USING ERRCODE = '42501';
     END IF;
 
+    -- Match the provisioning fence: PostgreSQL 16+ automatically records
+    -- a bootstrap-superuser-granted ADMIN membership from the CREATEROLE
+    -- provisioner to each created role. Permit only that reverse-direction
+    -- membership with INHERIT=FALSE and SET=FALSE. A runtime login must never
+    -- itself be a member of another role.
     IF EXISTS (
-        SELECT 1 FROM pg_catalog.pg_auth_members AS membership
-         WHERE membership.member = v_role_oid OR membership.roleid = v_role_oid
+        SELECT 1
+          FROM pg_catalog.pg_auth_members AS membership
+          JOIN pg_catalog.pg_roles AS member_role
+            ON member_role.oid = membership.member
+          JOIN pg_catalog.pg_roles AS grantor
+            ON grantor.oid = membership.grantor
+         WHERE membership.member = v_role_oid
+            OR (
+                membership.roleid = v_role_oid
+                AND (
+                    current_setting('server_version_num')::integer < 160000
+                    OR member_role.rolname <> 'powerops_provisioner'
+                    OR NOT membership.admin_option
+                    OR NOT grantor.rolsuper
+                    OR COALESCE(
+                        (to_jsonb(membership)->>'inherit_option')::boolean, true
+                    )
+                    OR COALESCE(
+                        (to_jsonb(membership)->>'set_option')::boolean, true
+                    )
+                )
+            )
     ) THEN
-        RAISE EXCEPTION 'runtime identity with role memberships cannot receive domain access'
+        RAISE EXCEPTION 'runtime identity has an unsafe role membership'
             USING ERRCODE = '42501';
     END IF;
 

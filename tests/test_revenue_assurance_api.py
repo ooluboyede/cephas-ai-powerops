@@ -3,11 +3,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from starlette.requests import Request
-
-import pytest
 
 from powerops.main import app
 from powerops.revenue_assurance import (

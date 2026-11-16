@@ -118,7 +118,7 @@ class ScopedConnectionPool:
             self._active_checkouts += 1
             self._total_checkouts += 1
             self._consecutive_failures = 0
-            self._last_success_at = datetime.now(timezone.utc)
+            self._last_success_at = datetime.now(UTC)
             self._last_failure_kind = None
             return pool, connection
 
@@ -195,7 +195,7 @@ class ScopedConnectionPool:
             self._dsn = new_dsn
             self._rotation_count += 1
             self._consecutive_failures = 0
-            self._last_success_at = datetime.now(timezone.utc)
+            self._last_success_at = datetime.now(UTC)
             self._last_failure_kind = None
 
         # The old pool is drained after the swap. Existing borrowers may finish;

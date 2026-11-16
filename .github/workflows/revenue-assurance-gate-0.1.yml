@@ -2,6 +2,11 @@ name: PowerOps Revenue Assurance Gates 0.1–0.2
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - security/revenue-assurance-gate-0.1
+    paths:
+      - .github/workflows/revenue-assurance-gate-0.1.yml
 
 permissions:
   contents: read

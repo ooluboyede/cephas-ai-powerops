@@ -7,7 +7,7 @@ set -Eeuo pipefail
 : "${PGUSER:=postgres}"
 : "${PGPASSWORD:=postgres}"
 : "${POWEROPS_TEST_PASSWORD:=Gate1E-Disposable-Only-ChangeMe}"
-: "${PGBOUNCER_PORT:=6432}"
+: "${PGBOUNCER_PORT:=6543}"
 
 admin() {
   PGPASSWORD="$PGPASSWORD" psql -X -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" "$@"
@@ -74,15 +74,19 @@ EOF
 echo "[Gate 1H] Start PgBouncer in transaction-pooling mode"
 pgbouncer "$workdir/pgbouncer.ini" >"$workdir/pgbouncer-startup.log" 2>&1 &
 pgbouncer_pid=$!
+probe_log="$workdir/pgbouncer-probe.log"
 for attempt in $(seq 1 30); do
-  if PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -h 127.0.0.1 -p "$PGBOUNCER_PORT" -U pwr_gate1h_a1 -d "$PGDATABASE" -Atc 'SELECT 1' >/dev/null 2>&1; then
+  if PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -h 127.0.0.1 -p "$PGBOUNCER_PORT" -U pwr_gate1h_a1 -d "$PGDATABASE" -Atc 'SELECT 1' >"$probe_log" 2>&1; then
+    break
+  fi
+  if ! kill -0 "$pgbouncer_pid" 2>/dev/null; then
     break
   fi
   sleep 1
 done
-if ! PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -h 127.0.0.1 -p "$PGBOUNCER_PORT" -U pwr_gate1h_a1 -d "$PGDATABASE" -Atc 'SELECT 1' >/dev/null 2>&1; then
-  cat "$workdir/pgbouncer-startup.log" "$workdir/pgbouncer.log" 2>/dev/null >&2
-  echo "FAIL: PgBouncer did not become ready" >&2
+if ! PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -h 127.0.0.1 -p "$PGBOUNCER_PORT" -U pwr_gate1h_a1 -d "$PGDATABASE" -Atc 'SELECT 1' >"$probe_log" 2>&1; then
+  cat "$workdir/pgbouncer-startup.log" "$workdir/pgbouncer.log" "$probe_log" 2>/dev/null >&2
+  echo "FAIL: PgBouncer did not become ready on 127.0.0.1:$PGBOUNCER_PORT" >&2
   exit 1
 fi
 

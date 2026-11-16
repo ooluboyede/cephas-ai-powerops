@@ -71,12 +71,11 @@ BEGIN
         p_role_name
     );
 
-    -- PostgreSQL 16+ can grant the creating CREATEROLE principal membership
-    -- in the newly created role. Remove it before the runtime identity is usable.
-    EXECUTE pg_catalog.format(
-        'REVOKE %I FROM powerops_provisioner', p_role_name
-    );
-
+    -- PostgreSQL 16+ creates a bootstrap-superuser-granted ADMIN membership
+    -- from the CREATEROLE creator (powerops_provisioner) to this new role.
+    -- PostgreSQL deliberately prevents the CREATEROLE creator from revoking
+    -- that bootstrap grant. It is safe only with INHERIT=FALSE and SET=FALSE:
+    -- the runtime role must never be a member of any privileged role.
     SELECT r.oid INTO STRICT v_role_oid
       FROM pg_catalog.pg_roles AS r
      WHERE r.rolname = p_role_name;
@@ -126,10 +125,21 @@ BEGIN
        OR v_role.rolreplication OR v_role.rolbypassrls THEN
         RAISE EXCEPTION 'runtime role privilege verification failed';
     END IF;
+    -- The runtime login must not be a member of any role. On PostgreSQL
+    -- 16+, permit only the unavoidable bootstrap grant in the opposite
+    -- direction: powerops_provisioner is a member of this runtime role with
+    -- ADMIN=TRUE, INHERIT=FALSE and SET=FALSE. This grants no role privileges
+    -- to the runtime login and prevents it from SET ROLE-ing to provisioner.
     SELECT string_agg(
         pg_catalog.format(
-            'granted_role=%s member=%s grantor=%s admin_option=%s',
-            granted.rolname, member_role.rolname, grantor.rolname, m.admin_option
+            'granted_role=%s member=%s grantor=%s grantor_superuser=%s admin=%s inherit=%s set=%s',
+            granted.rolname,
+            member_role.rolname,
+            grantor.rolname,
+            grantor.rolsuper,
+            m.admin_option,
+            COALESCE(to_jsonb(m)->>'inherit_option', '<not-supported>'),
+            COALESCE(to_jsonb(m)->>'set_option', '<not-supported>')
         ),
         '; ' ORDER BY granted.rolname, member_role.rolname
     )
@@ -138,10 +148,21 @@ BEGIN
       JOIN pg_catalog.pg_roles AS granted ON granted.oid = m.roleid
       JOIN pg_catalog.pg_roles AS member_role ON member_role.oid = m.member
       JOIN pg_catalog.pg_roles AS grantor ON grantor.oid = m.grantor
-     WHERE m.member = v_role_oid OR m.roleid = v_role_oid;
+     WHERE m.member = v_role_oid
+        OR (
+            m.roleid = v_role_oid
+            AND (
+                current_setting('server_version_num')::integer < 160000
+                OR member_role.rolname <> 'powerops_provisioner'
+                OR NOT m.admin_option
+                OR NOT grantor.rolsuper
+                OR COALESCE((to_jsonb(m)->>'inherit_option')::boolean, true)
+                OR COALESCE((to_jsonb(m)->>'set_option')::boolean, true)
+            )
+        );
 
     IF v_membership_detail IS NOT NULL THEN
-        RAISE EXCEPTION 'runtime role unexpectedly has role memberships'
+        RAISE EXCEPTION 'runtime role has an unsafe role membership'
             USING DETAIL = v_membership_detail;
     END IF;
 

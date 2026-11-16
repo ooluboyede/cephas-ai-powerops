@@ -18,6 +18,7 @@ DECLARE
     v_cluster_id uuid;
     v_role_oid oid;
     v_role pg_catalog.pg_roles%ROWTYPE;
+    v_membership_detail text;
 BEGIN
     -- The function owner is powerops_provisioner. Only the controlled
     -- deployment authority should be granted EXECUTE on this function.
@@ -125,28 +126,24 @@ BEGIN
        OR v_role.rolreplication OR v_role.rolbypassrls THEN
         RAISE EXCEPTION 'runtime role privilege verification failed';
     END IF;
-    DECLARE
-        v_membership_detail text;
-    BEGIN
-        SELECT string_agg(
-            pg_catalog.format(
-                'granted_role=%s member=%s grantor=%s admin_option=%s',
-                granted.rolname, member_role.rolname, grantor.rolname, m.admin_option
-            ),
-            '; ' ORDER BY granted.rolname, member_role.rolname
-        )
-          INTO v_membership_detail
-          FROM pg_catalog.pg_auth_members AS m
-          JOIN pg_catalog.pg_roles AS granted ON granted.oid = m.roleid
-          JOIN pg_catalog.pg_roles AS member_role ON member_role.oid = m.member
-          JOIN pg_catalog.pg_roles AS grantor ON grantor.oid = m.grantor
-         WHERE m.member = v_role_oid OR m.roleid = v_role_oid;
+    SELECT string_agg(
+        pg_catalog.format(
+            'granted_role=%s member=%s grantor=%s admin_option=%s',
+            granted.rolname, member_role.rolname, grantor.rolname, m.admin_option
+        ),
+        '; ' ORDER BY granted.rolname, member_role.rolname
+    )
+      INTO v_membership_detail
+      FROM pg_catalog.pg_auth_members AS m
+      JOIN pg_catalog.pg_roles AS granted ON granted.oid = m.roleid
+      JOIN pg_catalog.pg_roles AS member_role ON member_role.oid = m.member
+      JOIN pg_catalog.pg_roles AS grantor ON grantor.oid = m.grantor
+     WHERE m.member = v_role_oid OR m.roleid = v_role_oid;
 
-        IF v_membership_detail IS NOT NULL THEN
-            RAISE EXCEPTION 'runtime role unexpectedly has role memberships'
-                USING DETAIL = v_membership_detail;
-        END IF;
-    END;
+    IF v_membership_detail IS NOT NULL THEN
+        RAISE EXCEPTION 'runtime role unexpectedly has role memberships'
+            USING DETAIL = v_membership_detail;
+    END IF;
 
     UPDATE powerops_security.role_scope_binding
        SET active = true

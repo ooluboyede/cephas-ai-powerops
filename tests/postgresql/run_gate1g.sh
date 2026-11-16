@@ -26,24 +26,37 @@ SQL
 
 echo "[Gate 1G] Authenticated identity is immutable across role/GUC changes"
 as_role pwr_gate1g_session <<'SQL'
-DO $$
-DECLARE n bigint;
+DO $
+DECLARE
+  baseline_count bigint;
+  after_guc_count bigint;
 BEGIN
   IF session_user <> 'pwr_gate1g_session' OR current_user <> 'pwr_gate1g_session' THEN
     RAISE EXCEPTION 'unexpected initial authenticated identity';
   END IF;
+
+  -- Gate 1F inserts one additional same-scope A1 fixture row. Capture the
+  -- authenticated baseline rather than assuming the earlier Gate 1E count.
+  SELECT count(*) INTO baseline_count FROM powerops_data.feeders;
+  IF baseline_count <> 2 THEN
+    RAISE EXCEPTION 'unexpected Gate 1G baseline row count: %', baseline_count;
+  END IF;
+
   PERFORM pg_catalog.set_config('app.tenant_id',
     'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', true);
   PERFORM pg_catalog.set_config('app.business_unit_id',
     'b1000000-0000-4000-8000-000000000001', true);
-  SELECT count(*) INTO n FROM powerops_data.feeders;
-  IF n <> 1 THEN
-    RAISE EXCEPTION 'caller-controlled GUC changed scope; expected 1 row, got %', n;
+
+  SELECT count(*) INTO after_guc_count FROM powerops_data.feeders;
+  IF after_guc_count <> baseline_count THEN
+    RAISE EXCEPTION
+      'caller-controlled GUC changed scope; baseline was %, after GUC was %',
+      baseline_count, after_guc_count;
   END IF;
   IF session_user <> 'pwr_gate1g_session' THEN
     RAISE EXCEPTION 'session_user changed after GUC manipulation';
   END IF;
-END $$;
+END $;
 PREPARE gate1g_scope_probe AS SELECT count(*) FROM powerops_data.feeders;
 EXECUTE gate1g_scope_probe;
 DEALLOCATE gate1g_scope_probe;

@@ -34,6 +34,7 @@ CASE_ID = UUID("f1000000-0000-4000-8000-000000000001")
 class FakeRepository:
     def __init__(self) -> None:
         self.last_scope: ScopeContext | None = None
+        self.recorded_outcomes: dict[UUID, str] = {}
 
     def list_findings(
         self,
@@ -102,8 +103,10 @@ class FakeRepository:
         self.last_scope = scope
         if case_id != CASE_ID:
             return None
+        outcome_id = uuid4()
+        self.recorded_outcomes[outcome_id] = scope.subject
         return RecoveryOutcomeRead(
-            outcome_id=uuid4(),
+            outcome_id=outcome_id,
             case_id=case_id,
             amount=payload.amount,
             currency=payload.currency,
@@ -116,8 +119,11 @@ class FakeRepository:
         self, scope: ScopeContext, outcome_id: UUID, payload: RecoveryVerificationCreate
     ) -> RecoveryVerificationRead | None:
         self.last_scope = scope
-        if outcome_id == UUID(int=0):
+        recorder = self.recorded_outcomes.get(outcome_id)
+        if recorder is None:
             return None
+        if recorder == scope.subject:
+            raise HTTPException(status_code=409, detail="Recorder cannot verify own outcome")
         return RecoveryVerificationRead(
             verification_id=uuid4(),
             outcome_id=outcome_id,
@@ -237,15 +243,43 @@ def test_recovery_recording_and_verification_are_separate(client: TestClient) ->
     assert recorded.status_code == 201
     assert recorded.json()["outcome"] == "reported"
 
+    outcome_id = UUID(recorded.json()["outcome_id"])
+    app.dependency_overrides[get_current_principal] = lambda: AuthenticatedPrincipal(
+        subject="independent-verifier-02",
+        tenant_id=TENANT_A,
+        business_unit_id=BU_A1,
+        roles=frozenset({"finance_verifier"}),
+    )
     verified = client.post(
-        f"/api/v1/revenue/recovery-outcomes/{uuid4()}/verification",
+        f"/api/v1/revenue/recovery-outcomes/{outcome_id}/verification",
         json={
             "evidence_reference": "independent-bank-confirmation",
             "reason": "Independent settlement evidence reconciled.",
         },
     )
     assert verified.status_code == 201
-    assert verified.json()["verifier_subject"] == "test-user-01"
+    assert verified.json()["verifier_subject"] == "independent-verifier-02"
+
+
+def test_recovery_recorder_cannot_verify_own_outcome(client: TestClient) -> None:
+    recorded = client.post(
+        f"/api/v1/revenue/cases/{CASE_ID}/recovery-outcomes",
+        json={
+            "amount": "1000.2500",
+            "currency": "NGN",
+            "outcome": "reported",
+            "evidence_reference": "bank-receipt-123",
+        },
+    )
+    outcome_id = UUID(recorded.json()["outcome_id"])
+    response = client.post(
+        f"/api/v1/revenue/recovery-outcomes/{outcome_id}/verification",
+        json={
+            "evidence_reference": "same-actor-evidence",
+            "reason": "Attempted self-verification must fail.",
+        },
+    )
+    assert response.status_code == 409
 
 
 def test_verified_outcome_cannot_be_submitted_directly(client: TestClient) -> None:

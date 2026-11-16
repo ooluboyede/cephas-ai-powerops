@@ -13,6 +13,7 @@ from powerops.revenue_assurance import (
     CaseCreate,
     DecisionCreate,
     RecoveryOutcomeCreate,
+    RecoveryVerificationCreate,
     ScopeContext,
 )
 
@@ -98,13 +99,36 @@ def test_postgres_repository_finding_case_decision_and_recovery_roundtrip() -> N
         RecoveryOutcomeCreate(
             amount=Decimal("1000.2500"),
             currency="NGN",
-            outcome="verified",
+            outcome="reported",
             evidence_reference="synthetic-bank-receipt-001",
         ),
     )
     assert outcome is not None
-    assert outcome.outcome == "verified"
+    assert outcome.outcome == "reported"
     assert outcome.amount == Decimal("1000.2500")
+
+    with pytest.raises(HTTPException) as same_actor:
+        repository.verify_recovery_outcome(
+            finance,
+            outcome.outcome_id,
+            RecoveryVerificationCreate(
+                evidence_reference="same-actor-evidence",
+                reason="Attempted self-verification must be rejected.",
+            ),
+        )
+    assert same_actor.value.status_code == 409
+
+    verifier = ScopeContext(TENANT_A, BU_A1, "independent-verifier-02")
+    verification = repository.verify_recovery_outcome(
+        verifier,
+        outcome.outcome_id,
+        RecoveryVerificationCreate(
+            evidence_reference="independent-bank-confirmation",
+            reason="Independent settlement evidence reconciled.",
+        ),
+    )
+    assert verification is not None
+    assert verification.verifier_subject == "independent-verifier-02"
 
     # Use the migration administrator here so the append-only triggers are
     # exercised directly rather than merely observing runtime GRANT denial.

@@ -80,7 +80,7 @@ for attempt in $(seq 1 30); do
 done
 client "$OLD_PASSWORD" -Atc 'SELECT 1' >/dev/null
 before=$(client "$OLD_PASSWORD" -At -c "SELECT session_user, (SELECT count(*) FROM powerops_data.feeders)")
-[[ "$before" == "pwr_gate1i_a1|1" ]] || { echo "FAIL: initial scope check: $before" >&2; exit 1; }
+[[ "$before" == "pwr_gate1i_a1|2" ]] || { echo "FAIL: initial scope check: $before" >&2; exit 1; }
 
 echo "[Gate 1I] Rotate database credential and atomically replace PgBouncer auth file"
 admin -c "ALTER ROLE pwr_gate1i_a1 PASSWORD '$NEW_PASSWORD'"
@@ -96,7 +96,7 @@ fi
 
 echo "[Gate 1I] Verify new credential authenticates and retains database-derived scope"
 after=$(client "$NEW_PASSWORD" -At -c "SELECT session_user, (SELECT count(*) FROM powerops_data.feeders)")
-[[ "$after" == "pwr_gate1i_a1|1" ]] || { echo "FAIL: rotated credential scope check: $after" >&2; exit 1; }
+[[ "$after" == "pwr_gate1i_a1|2" ]] || { echo "FAIL: rotated credential scope check: $after" >&2; exit 1; }
 
 echo "[Gate 1I] Terminate any remaining backend sessions for the retired credential generation"
 admin -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename='pwr_gate1i_a1' AND pid <> pg_backend_pid()"

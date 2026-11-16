@@ -7,8 +7,8 @@ Credential rotation validates a replacement pool before atomically swapping it.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timezone
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from threading import RLock
 from typing import Any
 from uuid import UUID
@@ -109,7 +109,7 @@ class ScopedConnectionPool:
                 connection = pool.getconn(timeout=self._timeout)
             except Exception as exc:
                 self._consecutive_failures += 1
-                self._last_failure_at = datetime.now(timezone.utc)
+                self._last_failure_at = datetime.now(UTC)
                 self._last_failure_kind = type(exc).__name__
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

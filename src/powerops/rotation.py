@@ -130,7 +130,7 @@ class CredentialRotationService:
                 )
             candidate_dsn = secret.reveal()
             if not candidate_dsn.strip() or any(
-                character in candidate_dsn for character in ("\x00", "\r", "\n")
+                character in candidate_dsn for character in ("\\x00", "\\r", "\\n")
             ):
                 raise CredentialRotationError("Secret is not a valid database credential")
 

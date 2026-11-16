@@ -19,6 +19,8 @@ from powerops.revenue_assurance import (
     FindingRead,
     RecoveryOutcomeCreate,
     RecoveryOutcomeRead,
+    RecoveryVerificationCreate,
+    RecoveryVerificationRead,
     ScopeContext,
     get_current_principal,
 )
@@ -108,6 +110,21 @@ class FakeRepository:
             outcome=payload.outcome,
             recorded_by=scope.subject,
             recorded_at=datetime.now(UTC),
+        )
+
+    def verify_recovery_outcome(
+        self, scope: ScopeContext, outcome_id: UUID, payload: RecoveryVerificationCreate
+    ) -> RecoveryVerificationRead | None:
+        self.last_scope = scope
+        if outcome_id == UUID(int=0):
+            return None
+        return RecoveryVerificationRead(
+            verification_id=uuid4(),
+            outcome_id=outcome_id,
+            verifier_subject=scope.subject,
+            evidence_reference=payload.evidence_reference,
+            reason=payload.reason,
+            verified_at=datetime.now(UTC),
         )
 
 
@@ -207,7 +224,31 @@ def test_approval_succeeds_with_approver_role(client: TestClient) -> None:
     assert response.status_code == 200
 
 
-def test_verified_recovery_contract(client: TestClient) -> None:
+def test_recovery_recording_and_verification_are_separate(client: TestClient) -> None:
+    recorded = client.post(
+        f"/api/v1/revenue/cases/{CASE_ID}/recovery-outcomes",
+        json={
+            "amount": "1000.2500",
+            "currency": "NGN",
+            "outcome": "reported",
+            "evidence_reference": "bank-receipt-123",
+        },
+    )
+    assert recorded.status_code == 201
+    assert recorded.json()["outcome"] == "reported"
+
+    verified = client.post(
+        f"/api/v1/revenue/recovery-outcomes/{uuid4()}/verification",
+        json={
+            "evidence_reference": "independent-bank-confirmation",
+            "reason": "Independent settlement evidence reconciled.",
+        },
+    )
+    assert verified.status_code == 201
+    assert verified.json()["verifier_subject"] == "test-user-01"
+
+
+def test_verified_outcome_cannot_be_submitted_directly(client: TestClient) -> None:
     response = client.post(
         f"/api/v1/revenue/cases/{CASE_ID}/recovery-outcomes",
         json={
@@ -217,8 +258,7 @@ def test_verified_recovery_contract(client: TestClient) -> None:
             "evidence_reference": "bank-receipt-123",
         },
     )
-    assert response.status_code == 201
-    assert response.json()["outcome"] == "verified"
+    assert response.status_code == 422
 
 
 def test_unknown_finding_returns_404(client: TestClient) -> None:

@@ -94,13 +94,6 @@ def get_current_principal(request: Request) -> AuthenticatedPrincipal:
             detail="Tenant and business-unit scope must come from authenticated identity",
         )
 
-    verifier = getattr(request.app.state, "jwt_verifier", None)
-    if verifier is None or not callable(getattr(verifier, "verify", None)):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="OIDC authentication is not configured",
-        )
-
     authorization = request.headers.get("authorization", "")
     scheme, separator, token = authorization.partition(" ")
     if not separator or scheme.lower() != "bearer" or not token.strip():
@@ -108,6 +101,13 @@ def get_current_principal(request: Request) -> AuthenticatedPrincipal:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="A valid bearer token is required",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    verifier = getattr(request.app.state, "jwt_verifier", None)
+    if verifier is None or not callable(getattr(verifier, "verify", None)):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OIDC authentication is not configured",
         )
 
     try:

@@ -7,6 +7,8 @@ on:
       - security/revenue-assurance-gate-0.1
     paths:
       - .github/workflows/postgresql-security.yml
+      - migrations/postgresql/**
+      - tests/postgresql/**
 
 permissions:
   contents: read

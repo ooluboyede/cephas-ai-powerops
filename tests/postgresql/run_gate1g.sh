@@ -26,7 +26,7 @@ SQL
 
 echo "[Gate 1G] Authenticated identity is immutable across role/GUC changes"
 as_role pwr_gate1g_session <<'SQL'
-DO $
+DO $gate1g$
 DECLARE
   baseline_count bigint;
   after_guc_count bigint;
@@ -56,7 +56,7 @@ BEGIN
   IF session_user <> 'pwr_gate1g_session' THEN
     RAISE EXCEPTION 'session_user changed after GUC manipulation';
   END IF;
-END $;
+END $gate1g$;
 PREPARE gate1g_scope_probe AS SELECT count(*) FROM powerops_data.feeders;
 EXECUTE gate1g_scope_probe;
 DEALLOCATE gate1g_scope_probe;

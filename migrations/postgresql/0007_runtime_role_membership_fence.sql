@@ -104,6 +104,17 @@ BEGIN
         'GRANT EXECUTE ON FUNCTION powerops_security.resolve_authenticated_scope() TO %I',
         p_role_name
     );
+    EXECUTE pg_catalog.format(
+        'GRANT EXECUTE ON FUNCTION powerops_security.row_scope_permits(uuid, uuid) TO %I',
+        p_role_name
+    );
+    EXECUTE pg_catalog.format(
+        'GRANT USAGE ON SCHEMA powerops_data TO %I', p_role_name
+    );
+    EXECUTE pg_catalog.format(
+        'GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA powerops_data TO %I',
+        p_role_name
+    );
 
     SELECT * INTO STRICT v_role
       FROM pg_catalog.pg_roles
@@ -140,10 +151,5 @@ ALTER FUNCTION powerops_security.provision_scope_login(name, uuid, text, uuid)
 REVOKE ALL ON FUNCTION powerops_security.provision_scope_login(name, uuid, text, uuid)
     FROM PUBLIC;
 
-
-ALTER FUNCTION powerops_security.provision_scope_login(name, uuid, text, uuid)
-    OWNER TO powerops_provisioner;
-REVOKE ALL ON FUNCTION powerops_security.provision_scope_login(name, uuid, text, uuid)
-    FROM PUBLIC;
 
 COMMIT;

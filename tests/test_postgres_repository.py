@@ -6,7 +6,6 @@ from uuid import UUID
 
 import psycopg
 import pytest
-
 from fastapi import HTTPException
 
 from powerops.postgres_repository import PostgresRevenueAssuranceRepository

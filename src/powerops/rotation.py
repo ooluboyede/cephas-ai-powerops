@@ -156,7 +156,7 @@ class CredentialRotationService:
                             tenant_id=self._tenant_id,
                             business_unit_id=self._business_unit_id,
                             outcome="failed",
-                            occurred_at=datetime.now(timezone.utc),
+                            occurred_at=datetime.now(UTC),
                         )
                     )
                 except Exception:
@@ -169,7 +169,7 @@ class CredentialRotationService:
                     "remain unchanged"
                 ) from None
 
-            rotated_at = datetime.now(timezone.utc)
+            rotated_at = datetime.now(UTC)
             self._active_version = version
             event = RotationAuditEvent(
                 reference=self._reference,

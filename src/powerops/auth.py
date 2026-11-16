@@ -7,7 +7,7 @@ or request bodies.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, cast
 from urllib.error import URLError
 from uuid import UUID
 
@@ -24,6 +24,13 @@ class AuthenticatedPrincipal:
     tenant_id: UUID
     business_unit_id: UUID
     roles: frozenset[str]
+
+
+class PrincipalVerifier(Protocol):
+    """Typed contract for the application-state JWT verifier."""
+
+    def verify(self, token: str) -> AuthenticatedPrincipal:
+        """Verify a bearer token and return its authenticated principal."""
 
 
 class OidcJwtVerifier:
@@ -88,7 +95,7 @@ def get_current_principal(request: Request) -> AuthenticatedPrincipal:
         )
 
     verifier = getattr(request.app.state, "jwt_verifier", None)
-    if verifier is None:
+    if verifier is None or not callable(getattr(verifier, "verify", None)):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="OIDC authentication is not configured",
@@ -104,7 +111,8 @@ def get_current_principal(request: Request) -> AuthenticatedPrincipal:
         )
 
     try:
-        return verifier.verify(token.strip())
+        typed_verifier = cast(PrincipalVerifier, verifier)
+        return typed_verifier.verify(token.strip())
     except (PyJWKClientConnectionError, URLError, TimeoutError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

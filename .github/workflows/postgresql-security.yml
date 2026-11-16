@@ -2,6 +2,11 @@ name: PostgreSQL Security Gates 1E–1I
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - security/revenue-assurance-gate-0.1
+    paths:
+      - .github/workflows/postgresql-security.yml
 
 permissions:
   contents: read

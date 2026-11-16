@@ -375,7 +375,6 @@ class PostgresRevenueAssuranceRepository:
                 SELECT recorded_by
                 FROM revenue_assurance.recovery_outcomes
                 WHERE tenant_id = %s AND business_unit_id = %s AND outcome_id = %s
-                FOR UPDATE
                 """,
                 (scope.tenant_id, scope.business_unit_id, outcome_id),
             ).fetchone()

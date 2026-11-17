@@ -33,5 +33,13 @@ This gate implements the rotation coordinator, not a background scheduler or a p
 - The coordinator does not expose an HTTP rotation endpoint. Rotation is an internal deployment operation; any future admin endpoint requires separate privileged authorization, step-up authentication, audit, and anti-CSRF protections.
 - It does not schedule rotation, create credentials in PostgreSQL, revoke old credentials, or select a provider.
 - The current repository's pool swap and drain behavior still needs real psycopg_pool concurrency/close validation.
-- Unit tests are authored but not executed. GitHub Actions minutes remain unavailable; security workflows stay manual-dispatch only.
-- Production approval requires live provider adapter, workload identity, durable audit integration, PostgreSQL 14–17 tests, concurrency/failure-injection tests, and independent security review.
+- CI evidence before Gate 0.5.8: Revenue Assurance Gates 0.1–0.2 passed on PostgreSQL 14, 15, 16 and 17 (run 43919924737); PostgreSQL Security Gates 1E–1I passed on PostgreSQL 14–17 (run 43919417287). These runs predate the Gate 0.5.8 remediation and do not validate its new migration or tests. The remediation must be rerun through both workflows before merge.
+- Production approval requires live provider adapter, workload identity, durable audit integration, PostgreSQL 14–17 tests, concurrency/failure-injection tests, and independent security review. PR #21 remains draft/unmerged pending these checks.
+
+## Gate 0.5.8 recovery-verification rollout requirements
+
+- Apply migration `0008_recovery_verification_separation.sql`, then `0009_recovery_verification_rollout.sql`.
+- Migration 0009 grants the new table to every active, database-bound business-unit runtime identity by calling the hardened `powerops_security.grant_revenue_assurance_access()` function. It does not grant access to tenant-wide or retired identities.
+- Migration 0009 intentionally stops if legacy `recovery_outcomes` rows still have `outcome='verified'`. The customer must reconcile those records before retrying; no verifier identity, reason, or evidence is fabricated.
+- Duplicate verification attempts are returned as HTTP 409 while the database unique constraint remains the final concurrency control.
+- PostgreSQL integration coverage must confirm that roles provisioned before migration 0008 receive the new table privileges and that duplicate verification returns a conflict.

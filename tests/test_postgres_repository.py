@@ -153,6 +153,17 @@ def test_postgres_repository_finding_case_decision_and_recovery_roundtrip() -> N
     assert verification is not None
     assert verification.verifier_subject == "independent-verifier-02"
 
+    with pytest.raises(HTTPException) as duplicate_verification:
+        repository.verify_recovery_outcome(
+            verifier,
+            outcome.outcome_id,
+            RecoveryVerificationCreate(
+                evidence_reference="duplicate-independent-confirmation",
+                reason="A second verification attempt must return a conflict.",
+            ),
+        )
+    assert duplicate_verification.value.status_code == 409
+
     # Use the migration administrator here so the append-only triggers are
     # exercised directly rather than merely observing runtime GRANT denial.
     assert ADMIN_DATABASE_URL is not None

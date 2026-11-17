@@ -28,7 +28,7 @@ admin <<'SQL'
 SELECT powerops_security.grant_revenue_assurance_access('pwr_gate1e_bu_a1');
 SELECT powerops_security.grant_revenue_assurance_access('pwr_gate1e_bu_a2');
 
-DO $
+DO $privileges$
 BEGIN
   IF NOT has_table_privilege('pwr_gate1e_bu_a1',
        'revenue_assurance.recovery_verifications', 'SELECT,INSERT') THEN
@@ -39,9 +39,9 @@ BEGIN
     RAISE EXCEPTION 'FAIL: pre-existing BU A2 runtime role lacks recovery verification privileges';
   END IF;
 END
-$;
+$privileges$;
 
-DO $
+DO $tenant$
 BEGIN
   BEGIN
     PERFORM powerops_security.grant_revenue_assurance_access('pwr_gate1e_tenant_a');
@@ -56,7 +56,7 @@ BEGIN
     NULL;
   END;
 END
-$$;
+$tenant$;
 SQL
 
 echo "[Revenue Assurance 0.1] Seed synthetic records in two business units"

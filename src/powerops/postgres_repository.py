@@ -14,6 +14,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
+from psycopg.errors import UniqueViolation
 
 from powerops.revenue_assurance import (
     CaseCreate,
@@ -388,9 +389,10 @@ class PostgresRevenueAssuranceRepository:
                         "the same outcome"
                     ),
                 )
-            row = connection.execute(
-                """
-                INSERT INTO revenue_assurance.recovery_verifications
+            try:
+                row = connection.execute(
+                    """
+                    INSERT INTO revenue_assurance.recovery_verifications
                     (tenant_id, business_unit_id, verification_id, outcome_id,
                      verifier_subject, evidence_reference, reason)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -405,8 +407,13 @@ class PostgresRevenueAssuranceRepository:
                     scope.subject,
                     payload.evidence_reference,
                     payload.reason,
-                ),
-            ).fetchone()
+                    ),
+                ).fetchone()
+            except UniqueViolation as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Recovery outcome has already been verified",
+                ) from exc
             self._append_audit(
                 connection,
                 scope,

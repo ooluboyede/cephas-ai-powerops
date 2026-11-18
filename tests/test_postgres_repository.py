@@ -37,6 +37,7 @@ TENANT_A = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 BU_A1 = UUID("a1000000-0000-4000-8000-000000000001")
 FINDING_A1 = UUID("d1000000-0000-4000-8000-000000000001")
 ISSUER = "https://idp.customer.example/tenant-a"
+SESSION_ID = UUID("f0000000-0000-4000-8000-000000000006")
 
 
 class CiPasswordHumanConnector:
@@ -138,6 +139,7 @@ def test_postgres_repository_finding_case_decision_and_human_recovery_roundtrip(
 
     outcome = human_repository.record_recovery_outcome(
         maker,
+        SESSION_ID,
         case.case_id,
         RecoveryOutcomeCreate(
             amount=Decimal("1000.2500"),
@@ -179,6 +181,7 @@ def test_postgres_repository_finding_case_decision_and_human_recovery_roundtrip(
 
     verification = human_repository.verify_recovery_outcome(
         verifier,
+        SESSION_ID,
         outcome.outcome_id,
         RecoveryVerificationCreate(
             evidence_reference="independent-bank-confirmation",
@@ -191,6 +194,7 @@ def test_postgres_repository_finding_case_decision_and_human_recovery_roundtrip(
     with pytest.raises(HTTPException) as duplicate_verification:
         human_repository.verify_recovery_outcome(
             verifier,
+            SESSION_ID,
             outcome.outcome_id,
             RecoveryVerificationCreate(
                 evidence_reference="duplicate-independent-confirmation",
@@ -203,6 +207,7 @@ def test_postgres_repository_finding_case_decision_and_human_recovery_roundtrip(
     # insert commits; the other returns conflict without a second audit append.
     concurrent_outcome = human_repository.record_recovery_outcome(
         maker,
+        SESSION_ID,
         case.case_id,
         RecoveryOutcomeCreate(
             amount=Decimal("2000.0000"),
@@ -219,6 +224,7 @@ def test_postgres_repository_finding_case_decision_and_human_recovery_roundtrip(
         try:
             result = human_repository.verify_recovery_outcome(
                 verifier,
+                SESSION_ID,
                 concurrent_outcome.outcome_id,
                 RecoveryVerificationCreate(
                     evidence_reference="concurrent-independent-evidence",

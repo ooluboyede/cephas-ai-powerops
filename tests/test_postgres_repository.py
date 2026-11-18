@@ -272,7 +272,7 @@ def test_postgres_repository_finding_case_decision_and_human_recovery_roundtrip(
         ).fetchall()
     assert verification_count == 1
     assert audit_count == 1
-    assert {row["actor_subject"] for row in audit_actors} == {
+    assert {row[1] for row in audit_actors} == {
         f"{ISSUER}|human-operator-0144",
         f"{ISSUER}|human-verifier-0144",
     }

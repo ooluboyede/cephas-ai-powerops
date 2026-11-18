@@ -16,6 +16,7 @@ from powerops.revenue_assurance import RecoveryOutcomeCreate, RecoveryVerificati
 TENANT = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 BUSINESS_UNIT = UUID("a1000000-0000-4000-8000-000000000001")
 ISSUER = "https://identity.customer.example"
+SESSION_ID = UUID("f0000000-0000-4000-8000-000000000006")
 
 
 def principal(
@@ -112,7 +113,7 @@ def test_record_outcome_uses_human_session_and_database_derived_audit_actor() ->
     repository = PostgresHumanRevenueAssuranceRepository(session)  # type: ignore[arg-type]
     maker = principal()
 
-    result = repository.record_recovery_outcome(maker, uuid4(), outcome_payload())
+    result = repository.record_recovery_outcome(maker, SESSION_ID, uuid4(), outcome_payload())
 
     assert result is not None
     assert result.recorded_by == f"{ISSUER}|maker-001"
@@ -140,7 +141,7 @@ def test_verify_outcome_uses_distinct_human_verifier_session() -> None:
     repository = PostgresHumanRevenueAssuranceRepository(session)  # type: ignore[arg-type]
     verifier = principal(role="finance_verifier", subject="verifier-001")
 
-    result = repository.verify_recovery_outcome(verifier, uuid4(), verification_payload())
+    result = repository.verify_recovery_outcome(verifier, SESSION_ID, uuid4(), verification_payload())
 
     assert result is not None
     assert result.verifier_subject == f"{ISSUER}|verifier-001"
@@ -177,7 +178,7 @@ def test_repository_rejects_non_exclusive_finance_roles(value: AuthenticatedPrin
     repository = PostgresHumanRevenueAssuranceRepository(session)  # type: ignore[arg-type]
 
     with pytest.raises(HTTPException) as exc_info:
-        repository.record_recovery_outcome(value, uuid4(), outcome_payload())
+        repository.record_recovery_outcome(value, SESSION_ID, uuid4(), outcome_payload())
     assert exc_info.value.status_code == 403
     assert session.principals == []
 
@@ -191,7 +192,7 @@ def test_verifier_cannot_verify_own_database_derived_outcome() -> None:
     verifier = principal(role="finance_verifier", subject="verifier-001")
 
     with pytest.raises(HTTPException) as exc_info:
-        repository.verify_recovery_outcome(verifier, uuid4(), verification_payload())
+        repository.verify_recovery_outcome(verifier, SESSION_ID, uuid4(), verification_payload())
     assert exc_info.value.status_code == 409
     assert not any(
         "INSERT INTO revenue_assurance.recovery_verifications" in query
@@ -206,7 +207,7 @@ def test_duplicate_verification_returns_conflict_before_audit_append() -> None:
     verifier = principal(role="finance_verifier", subject="verifier-001")
 
     with pytest.raises(HTTPException) as exc_info:
-        repository.verify_recovery_outcome(verifier, uuid4(), verification_payload())
+        repository.verify_recovery_outcome(verifier, SESSION_ID, uuid4(), verification_payload())
     assert exc_info.value.status_code == 409
     assert not any(
         "INSERT INTO revenue_assurance.audit_events" in query

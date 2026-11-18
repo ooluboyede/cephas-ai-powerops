@@ -221,7 +221,7 @@ def create_human_database_session(
     principal: AuthenticatedPrincipal = Depends(get_current_principal),
 ) -> HumanDatabaseSessionRead:
     """Exchange a verified step-up broker token for a server-side database session lease."""
-    _require_any_role(principal, "finance_verifier")
+    _require_any_role(principal, "finance_operator", "finance_verifier")
     if not principal.issuer.startswith("https://"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

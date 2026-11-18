@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
+from pydantic import ValidationError
 
 from powerops.credential_provider_config import (
     HumanSessionProviderConfig,
@@ -58,6 +59,7 @@ def test_provider_config_rejects_insecure_or_credential_bearing_endpoint(
     [
         ("ca_bundle_path", "relative/ca.pem"),
         ("ca_bundle_path", "/etc/powerops/../secret/ca.pem"),
+        ("ca_bundle_path", "C:\\\\powerops\\\\..\\\\secret\\\\ca.pem"),
         ("namespace", "../other"),
         ("secret_store", "mount/*"),
         ("credential_path_prefix", "powerops/../other"),
@@ -96,6 +98,6 @@ def test_provider_config_rejects_invalid_timeout() -> None:
 def test_model_is_immutable_and_does_not_expose_secret_fields() -> None:
     values = deepcopy(valid_config())
     config = validate_human_session_provider_config(values)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         config.provider_id = "changed"  # type: ignore[misc]
     assert "token" not in config.model_fields

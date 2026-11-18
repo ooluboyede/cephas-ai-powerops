@@ -7,6 +7,7 @@ and certificate paths produced by the customer-operated identity broker.
 """
 from __future__ import annotations
 
+import hmac
 import os
 import stat
 import tempfile
@@ -17,6 +18,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol, cast
 from uuid import UUID
+
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
+from cryptography.x509.oid import NameOID
 import re
 
 from powerops.human_session_issuer import HumanSessionCredentialStore
@@ -113,6 +118,47 @@ class VaultBackedHumanPostgresCredentialProvider:
         ):
             raise HumanSessionRejected(
                 "Stored customer credentials do not match the verified human session"
+            )
+
+
+        try:
+            certificate = x509.load_pem_x509_certificate(
+                stored.certificate_pem.encode("ascii")
+            )
+            private_key = serialization.load_pem_private_key(
+                stored.private_key_pem.encode("ascii"),
+                password=None,
+            )
+            certificate_public_key = certificate.public_key().public_bytes(
+                serialization.Encoding.DER,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            private_public_key = private_key.public_key().public_bytes(
+                serialization.Encoding.DER,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+        except (ValueError, TypeError) as exc:
+            raise HumanSessionRejected(
+                "Customer vault returned invalid certificate or private-key material"
+            ) from exc
+        if not hmac.compare_digest(certificate_public_key, private_public_key):
+            raise HumanSessionRejected(
+                "Customer certificate and private key do not form a matching pair"
+            )
+        common_names = certificate.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+        if not common_names or common_names[0].value != stored.database_role:
+            raise HumanSessionRejected(
+                "Customer certificate common name does not match its database role"
+            )
+        certificate_not_before = certificate.not_valid_before.replace(tzinfo=UTC)
+        certificate_not_after = certificate.not_valid_after.replace(tzinfo=UTC)
+        if (
+            certificate_not_before > now
+            or certificate_not_after <= now
+            or certificate_not_after > expiry
+        ):
+            raise HumanSessionRejected(
+                "Customer certificate validity does not match the stored session lease"
             )
 
         temp_root = self._secure_temp_directory

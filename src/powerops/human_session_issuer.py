@@ -54,6 +54,7 @@ class HumanSessionCredentialStore(Protocol):
         subject: str,
         tenant_id: UUID,
         business_unit_id: UUID,
+        finance_operator: bool,
         finance_verifier: bool,
         database_role: str,
         certificate_pem: str,
@@ -104,8 +105,12 @@ class HumanSessionIssuer:
         """Issue and store credentials; return only a non-secret lease."""
         if not principal.issuer.startswith("https://") or not principal.subject.strip():
             raise BrokerAuthorizationError("A verified OIDC principal is required")
-        if "finance_verifier" not in principal.roles:
-            raise BrokerAuthorizationError("Finance-verifier entitlement is required")
+        finance_operator = "finance_operator" in principal.roles
+        finance_verifier = "finance_verifier" in principal.roles
+        if finance_operator == finance_verifier:
+            raise BrokerAuthorizationError(
+                "Exactly one finance maker or verifier entitlement is required"
+            )
         if not broker_token.strip():
             raise BrokerAuthenticationError("A customer broker token is required")
 
@@ -117,7 +122,8 @@ class HumanSessionIssuer:
             or issued.subject != principal.subject
             or issued.tenant_id != principal.tenant_id
             or issued.business_unit_id != principal.business_unit_id
-            or issued.finance_verifier is not True
+            or issued.finance_operator is not finance_operator
+            or issued.finance_verifier is not finance_verifier
         ):
             raise BrokerAuthorizationError(
                 "Broker-issued database identity does not match the API principal"
@@ -143,6 +149,7 @@ class HumanSessionIssuer:
                 subject=issued.subject,
                 tenant_id=issued.tenant_id,
                 business_unit_id=issued.business_unit_id,
+                finance_operator=issued.finance_operator,
                 finance_verifier=issued.finance_verifier,
                 database_role=issued.database_role,
                 certificate_pem=issued.certificate_pem,

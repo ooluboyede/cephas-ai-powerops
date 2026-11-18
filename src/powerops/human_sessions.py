@@ -22,6 +22,7 @@ class HumanSessionRejected(RuntimeError):
 class HumanSessionPrincipal:
     """Verified API identity; never populated from request-supplied scope."""
 
+    session_id: UUID
     issuer: str
     subject: str
     tenant_id: UUID

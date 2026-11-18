@@ -137,6 +137,39 @@ class FakeRepository:
         )
 
 
+class FakeHumanRepository:
+    def __init__(self, repository: FakeRepository) -> None:
+        self.repository = repository
+
+    @staticmethod
+    def _scope(principal: AuthenticatedPrincipal) -> ScopeContext:
+        return ScopeContext(
+            tenant_id=principal.tenant_id,
+            business_unit_id=principal.business_unit_id,
+            subject=principal.subject,
+        )
+
+    def record_recovery_outcome(
+        self,
+        principal: AuthenticatedPrincipal,
+        case_id: UUID,
+        payload: RecoveryOutcomeCreate,
+    ) -> RecoveryOutcomeRead | None:
+        return self.repository.record_recovery_outcome(
+            self._scope(principal), case_id, payload
+        )
+
+    def verify_recovery_outcome(
+        self,
+        principal: AuthenticatedPrincipal,
+        outcome_id: UUID,
+        payload: RecoveryVerificationCreate,
+    ) -> RecoveryVerificationRead | None:
+        return self.repository.verify_recovery_outcome(
+            self._scope(principal), outcome_id, payload
+        )
+
+
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     repository = FakeRepository()
@@ -151,17 +184,18 @@ def client() -> Iterator[TestClient]:
                 "revenue_reviewer",
                 "revenue_approver",
                 "finance_operator",
-                "finance_verifier",
             }
         ),
     )
     app.state.revenue_assurance_repository = repository
+    app.state.human_revenue_assurance_repository = FakeHumanRepository(repository)
     app.state.human_session_issuer = None
     app.dependency_overrides[get_current_principal] = lambda: principal
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
     app.state.revenue_assurance_repository = None
+    app.state.human_revenue_assurance_repository = None
     app.state.human_session_issuer = None
 
 
@@ -404,6 +438,12 @@ def test_recovery_recorder_cannot_verify_own_outcome(client: TestClient) -> None
         },
     )
     outcome_id = UUID(recorded.json()["outcome_id"])
+    app.dependency_overrides[get_current_principal] = lambda: AuthenticatedPrincipal(
+        subject="test-user-01",
+        tenant_id=TENANT_A,
+        business_unit_id=BU_A1,
+        roles=frozenset({"finance_verifier"}),
+    )
     response = client.post(
         f"/api/v1/revenue/recovery-outcomes/{outcome_id}/verification",
         json={

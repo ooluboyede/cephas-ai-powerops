@@ -103,6 +103,11 @@ class IssuedDatabaseSession:
     expires_at: datetime
     database_role: str
     session_id: UUID
+    issuer: str
+    subject: str
+    tenant_id: UUID
+    business_unit_id: UUID
+    finance_verifier: bool
 
 
 class BrokerTokenVerifier(Protocol):
@@ -414,4 +419,9 @@ class DatabaseSessionBroker:
             expires_at=certificate_expiry,
             database_role=database_principal.database_role,
             session_id=uuid4(),
+            issuer=principal.issuer,
+            subject=principal.subject,
+            tenant_id=principal.tenant_id,
+            business_unit_id=principal.business_unit_id,
+            finance_verifier=database_principal.finance_verifier,
         )

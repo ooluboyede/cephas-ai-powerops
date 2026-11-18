@@ -70,7 +70,7 @@ class HumanSessionProviderConfig(BaseModel):
     def validate_ca_bundle_path(cls, value: str) -> str:
         if not (PurePosixPath(value).is_absolute() or PureWindowsPath(value).is_absolute()):
             raise ValueError("CA bundle path must be absolute")
-        if any(part == ".." for part in value.replace("\\\\", "/").split("/")):
+        if any(part == ".." for part in value.replace(chr(92), "/").split("/")):
             raise ValueError("CA bundle path must not traverse parent directories")
         return value
 

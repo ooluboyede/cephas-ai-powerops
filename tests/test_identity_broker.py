@@ -6,7 +6,8 @@ from uuid import UUID
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 from cryptography.x509.oid import NameOID
 
 import jwt
@@ -89,7 +90,7 @@ class DisposableCertificateIssuer:
         subject: str,
         tenant_id: UUID,
         business_unit_id: UUID,
-        public_key: object,
+        public_key: PublicKeyTypes,
         expires_at: datetime,
     ) -> str:
         certificate = (

@@ -48,6 +48,9 @@ class FakeCredentialStore:
     def store_session(self, **values: object) -> None:
         self.values.update(values)
 
+    def get_session(self, session_id: UUID) -> None:
+        return None
+
 
 def issued_session(**overrides: object) -> IssuedDatabaseSession:
     values: dict[str, object] = {

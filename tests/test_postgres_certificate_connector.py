@@ -204,7 +204,7 @@ def test_vault_provider_rejects_another_session_id(
         secure_temp_directory=secure_temp,
     )
 
-    with pytest.raises(HumanSessionRejected, match="do not match"):
+    with pytest.raises(HumanSessionRejected, match="missing or expired"):
         with provider.materialize_credentials(principal()):
             pytest.fail("A different lease must not be materialized")
 

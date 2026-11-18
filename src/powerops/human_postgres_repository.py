@@ -184,7 +184,7 @@ class PostgresHumanRevenueAssuranceRepository:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only a distinct finance verifier may verify recovery outcomes",
             )
-        db_principal = self._database_principal(principal)
+        db_principal = self._database_principal(principal, session_id)
         verification_id = uuid4()
         with self._human_session.connection(db_principal) as connection:
             outcome = connection.execute(

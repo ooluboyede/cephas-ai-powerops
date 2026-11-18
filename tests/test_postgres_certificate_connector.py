@@ -154,7 +154,9 @@ def test_connector_fails_closed_when_credential_provider_is_unavailable(
     tmp_path: Path,
 ) -> None:
     class UnavailableProvider:
-        def get_credentials(self, principal_value: HumanSessionPrincipal) -> HumanPostgresCredentials:
+        def get_credentials(
+            self, principal_value: HumanSessionPrincipal
+        ) -> HumanPostgresCredentials:
             raise RuntimeError("directory unavailable")
 
     connector = PsycopgHumanSessionConnector(

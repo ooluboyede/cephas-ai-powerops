@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import os
+from threading import Barrier
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -163,6 +165,67 @@ def test_postgres_repository_finding_case_decision_and_recovery_roundtrip() -> N
             ),
         )
     assert duplicate_verification.value.status_code == 409
+
+    # Race two independent PostgreSQL transactions against a fresh outcome.
+    # Exactly one insert must commit; the loser must receive HTTP 409.
+    concurrent_outcome = repository.record_recovery_outcome(
+        finance,
+        case.case_id,
+        RecoveryOutcomeCreate(
+            amount=Decimal("2000.0000"),
+            currency="NGN",
+            outcome="reported",
+            evidence_reference="synthetic-concurrent-recovery-002",
+        ),
+    )
+    assert concurrent_outcome is not None
+    barrier = Barrier(2)
+
+    def attempt_concurrent_verification(subject: str) -> str:
+        actor = ScopeContext(TENANT_A, BU_A1, subject)
+        barrier.wait(timeout=10)
+        try:
+            result = repository.verify_recovery_outcome(
+                actor,
+                concurrent_outcome.outcome_id,
+                RecoveryVerificationCreate(
+                    evidence_reference=f"concurrent-evidence-{subject}",
+                    reason="Concurrent independent verification race test.",
+                ),
+            )
+            assert result is not None
+            return "created"
+        except HTTPException as exc:
+            assert exc.status_code == 409
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(
+            attempt_concurrent_verification,
+            ("concurrent-verifier-03", "concurrent-verifier-04"),
+        ))
+    assert sorted(results) == ["conflict", "created"]
+
+    with psycopg.connect(ADMIN_DATABASE_URL) as connection:
+        verification_count = connection.execute(
+            """
+            SELECT count(*)
+            FROM revenue_assurance.recovery_verifications
+            WHERE tenant_id = %s AND business_unit_id = %s AND outcome_id = %s
+            """,
+            (TENANT_A, BU_A1, concurrent_outcome.outcome_id),
+        ).fetchone()[0]
+        audit_count = connection.execute(
+            """
+            SELECT count(*)
+            FROM revenue_assurance.audit_events
+            WHERE tenant_id = %s AND business_unit_id = %s
+              AND action = 'recovery.outcome_verified' AND entity_id = %s
+            """,
+            (TENANT_A, BU_A1, str(concurrent_outcome.outcome_id)),
+        ).fetchone()[0]
+    assert verification_count == 1
+    assert audit_count == 1
 
     # Use the migration administrator here so the append-only triggers are
     # exercised directly rather than merely observing runtime GRANT denial.

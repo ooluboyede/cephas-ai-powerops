@@ -208,6 +208,11 @@ def test_broker_issues_short_lived_certificate_for_directory_role() -> None:
     certificate = x509.load_pem_x509_certificate(issued.certificate_pem.encode("ascii"))
     common_name = certificate.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
     assert issued.database_role == "pwr_finance_user_001"
+    assert issued.issuer == principal.issuer
+    assert issued.subject == principal.subject
+    assert issued.tenant_id == principal.tenant_id
+    assert issued.business_unit_id == principal.business_unit_id
+    assert issued.finance_verifier is True
     assert len(common_name) == 1
     assert common_name[0].value == "pwr_finance_user_001"
     assert issued.expires_at <= now + timedelta(seconds=120)

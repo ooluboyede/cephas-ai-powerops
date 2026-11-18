@@ -78,6 +78,9 @@ jobs:
       - name: Identity broker focused tests
         run: .venv/bin/pytest -q tests/test_identity_broker.py
 
+      - name: Human database session focused tests
+        run: .venv/bin/pytest -q tests/test_human_sessions.py
+
       - name: Python tests
         run: .venv/bin/pytest
 

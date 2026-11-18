@@ -27,6 +27,8 @@ class HumanPostgresCredentials:
     subject: str
     tenant_id: UUID
     business_unit_id: UUID
+    finance_operator: bool
+    finance_verifier: bool
     database_role: str
     host: str
     port: int
@@ -107,6 +109,8 @@ class PsycopgHumanSessionConnector:
             or credentials.subject != principal.subject
             or credentials.tenant_id != principal.tenant_id
             or credentials.business_unit_id != principal.business_unit_id
+            or credentials.finance_operator != principal.finance_operator
+            or credentials.finance_verifier != principal.finance_verifier
         ):
             raise HumanSessionRejected(
                 "Customer certificate identity does not match the API principal"

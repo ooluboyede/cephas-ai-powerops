@@ -75,6 +75,9 @@ jobs:
       - name: Mypy
         run: .venv/bin/mypy src
 
+      - name: Identity broker focused tests
+        run: .venv/bin/pytest -q tests/test_identity_broker.py
+
       - name: Python tests
         run: .venv/bin/pytest
 

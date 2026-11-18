@@ -7,7 +7,7 @@ set -Eeuo pipefail
 : "${PGPASSWORD:=postgres}"
 : "${POWEROPS_TEST_PASSWORD:=Gate1E-Disposable-Only-ChangeMe}"
 admin() { PGPASSWORD="$PGPASSWORD" psql -X -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" "$@"; }
-actor() { local role="$1"; shift; PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$role" -d "$PGDATABASE" "$@"; }
+actor() { local role="$1"; shift; PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -q -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$role" -d "$PGDATABASE" "$@"; }
 
 echo "[Gate 0.5.14.5] Apply database-derived recovery and audit actor triggers"
 admin -f migrations/postgresql/0012_database_derived_finance_actors.sql

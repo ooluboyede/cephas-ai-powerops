@@ -7,7 +7,9 @@ and certificate paths produced by the customer-operated identity broker.
 """
 from __future__ import annotations
 
+import os
 import stat
+import tempfile
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
@@ -17,6 +19,7 @@ from typing import Any, Protocol, cast
 from uuid import UUID
 import re
 
+from powerops.human_session_issuer import HumanSessionCredentialStore
 from powerops.human_sessions import HumanSessionPrincipal, HumanSessionRejected
 
 
@@ -48,6 +51,111 @@ class HumanPostgresCredentialProvider(Protocol):
         self, principal: HumanSessionPrincipal
     ) -> AbstractContextManager[HumanPostgresCredentials]:
         """Materialize exact-session credentials only for the connection lifetime."""
+
+
+
+
+class VaultBackedHumanPostgresCredentialProvider:
+    """Materialize one customer-vault session into short-lived 0600 files.
+
+    The configured temporary directory must be customer-managed, owner-only,
+    and mounted on encrypted ephemeral storage (for example tmpfs). The vault
+    adapter is responsible for encryption at rest and access auditing.
+    """
+
+    _MAX_CERTIFICATE_TTL = timedelta(seconds=300)
+
+    def __init__(
+        self,
+        credential_store: HumanSessionCredentialStore,
+        *,
+        host: str,
+        port: int,
+        database_name: str,
+        root_certificate_path: Path,
+        secure_temp_directory: Path,
+    ) -> None:
+        self._credential_store = credential_store
+        self._host = host
+        self._port = port
+        self._database_name = database_name
+        self._root_certificate_path = root_certificate_path
+        self._secure_temp_directory = secure_temp_directory
+
+    @contextmanager
+    def materialize_credentials(
+        self, principal: HumanSessionPrincipal
+    ) -> Iterator[HumanPostgresCredentials]:
+        try:
+            stored = self._credential_store.get_session(principal.session_id)
+        except Exception as exc:
+            raise HumanSessionRejected(
+                "Customer human-session vault lookup failed"
+            ) from exc
+        if stored is None:
+            raise HumanSessionRejected("Customer human-session lease is missing or expired")
+
+        now = datetime.now(UTC)
+        expiry = stored.expires_at
+        if expiry.tzinfo is None:
+            raise HumanSessionRejected("Stored session expiry must be timezone-aware")
+        expiry = expiry.astimezone(UTC)
+        if expiry <= now or expiry > now + self._MAX_CERTIFICATE_TTL:
+            raise HumanSessionRejected("Stored human-session lease is expired or too long")
+        if (
+            stored.session_id != principal.session_id
+            or stored.issuer != principal.issuer
+            or stored.subject != principal.subject
+            or stored.tenant_id != principal.tenant_id
+            or stored.business_unit_id != principal.business_unit_id
+            or stored.finance_operator != principal.finance_operator
+            or stored.finance_verifier != principal.finance_verifier
+        ):
+            raise HumanSessionRejected(
+                "Stored customer credentials do not match the verified human session"
+            )
+
+        temp_root = self._secure_temp_directory
+        try:
+            metadata = temp_root.lstat()
+        except OSError as exc:
+            raise HumanSessionRejected(
+                "Customer secure temporary directory is unavailable"
+            ) from exc
+        if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+            raise HumanSessionRejected("Customer secure temporary path must be a real directory")
+        if stat.S_IMODE(metadata.st_mode) & 0o077:
+            raise HumanSessionRejected("Customer secure temporary directory permissions are too broad")
+
+        with tempfile.TemporaryDirectory(
+            prefix="powerops-human-session-",
+            dir=str(temp_root),
+        ) as temporary:
+            directory = Path(temporary)
+            os.chmod(directory, 0o700)
+            certificate_path = directory / "client.crt"
+            private_key_path = directory / "client.key"
+            certificate_path.write_text(stored.certificate_pem, encoding="ascii")
+            private_key_path.write_text(stored.private_key_pem, encoding="ascii")
+            os.chmod(certificate_path, 0o600)
+            os.chmod(private_key_path, 0o600)
+            yield HumanPostgresCredentials(
+                session_id=stored.session_id,
+                issuer=stored.issuer,
+                subject=stored.subject,
+                tenant_id=stored.tenant_id,
+                business_unit_id=stored.business_unit_id,
+                finance_operator=stored.finance_operator,
+                finance_verifier=stored.finance_verifier,
+                database_role=stored.database_role,
+                host=self._host,
+                port=self._port,
+                database_name=self._database_name,
+                certificate_path=certificate_path,
+                private_key_path=private_key_path,
+                root_certificate_path=self._root_certificate_path,
+                expires_at=expiry,
+            )
 
 
 class PsycopgConnectFactory(Protocol):

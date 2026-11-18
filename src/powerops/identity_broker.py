@@ -18,6 +18,7 @@ import jwt
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 from cryptography.x509.oid import NameOID
 from jwt import PyJWKClient, PyJWKClientConnectionError, PyJWTError
 
@@ -130,7 +131,7 @@ class CustomerCertificateIssuer(Protocol):
         subject: str,
         tenant_id: UUID,
         business_unit_id: UUID,
-        public_key: object,
+        public_key: PublicKeyTypes,
         expires_at: datetime,
     ) -> str:
         """Sign a role-bound certificate using a customer-controlled CA/HSM."""
@@ -256,7 +257,7 @@ class DatabaseSessionBroker:
         self._certificate_issuer = certificate_issuer
 
     @staticmethod
-    def _validated_csr(csr_pem: str) -> tuple[object, str]:
+    def _validated_csr(csr_pem: str) -> tuple[PublicKeyTypes, str]:
         try:
             csr = x509.load_pem_x509_csr(csr_pem.encode("ascii"))
         except (ValueError, UnicodeEncodeError) as exc:

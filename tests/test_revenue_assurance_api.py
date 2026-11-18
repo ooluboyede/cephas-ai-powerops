@@ -8,7 +8,8 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from powerops.identity_broker import BrokerReplayError, IssuedDatabaseSession
+from powerops.identity_broker import BrokerReplayError
+from powerops.human_session_issuer import HumanDatabaseSessionLease
 from powerops.main import app
 from powerops.revenue_assurance import (
     AuthenticatedPrincipal,
@@ -155,7 +156,7 @@ def client() -> Iterator[TestClient]:
         ),
     )
     app.state.revenue_assurance_repository = repository
-    app.state.database_session_broker = None
+    app.state.human_session_issuer = None
     app.dependency_overrides[get_current_principal] = lambda: principal
     with TestClient(app) as test_client:
         yield test_client
@@ -165,45 +166,26 @@ def client() -> Iterator[TestClient]:
 
 
 
-class FakeHumanSessionBroker:
-    def __init__(
-        self,
-        *,
-        issuer: str = ISSUER,
-        subject: str = "test-user-01",
-        tenant_id: UUID = TENANT_A,
-        business_unit_id: UUID = BU_A1,
-        error: Exception | None = None,
-    ) -> None:
-        self.issuer = issuer
-        self.subject = subject
-        self.tenant_id = tenant_id
-        self.business_unit_id = business_unit_id
+class FakeHumanSessionIssuer:
+    def __init__(self, *, error: Exception | None = None) -> None:
         self.error = error
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[AuthenticatedPrincipal, str]] = []
 
-    def issue_session(self, *, token: str, csr_pem: str) -> IssuedDatabaseSession:
-        self.calls.append((token, csr_pem))
+    def create_session(
+        self, *, principal: AuthenticatedPrincipal, broker_token: str
+    ) -> HumanDatabaseSessionLease:
+        self.calls.append((principal, broker_token))
         if self.error is not None:
             raise self.error
-        return IssuedDatabaseSession(
-            certificate_pem="-----BEGIN CERTIFICATE-----\\ncustomer-signed\\n",
-            expires_at=datetime.now(UTC) + timedelta(minutes=2),
-            database_role="pwr_finance_user_17",
+        return HumanDatabaseSessionLease(
             session_id=uuid4(),
-            issuer=self.issuer,
-            subject=self.subject,
-            tenant_id=self.tenant_id,
-            business_unit_id=self.business_unit_id,
-            finance_verifier=True,
+            database_role="pwr_finance_user_17",
+            expires_at=datetime.now(UTC) + timedelta(minutes=2),
         )
 
 
 def _database_session_request() -> dict[str, str]:
-    return {
-        "broker_token": "signed-customer-step-up-token",
-        "csr_pem": "-----BEGIN CERTIFICATE REQUEST-----\\nproof-of-possession\\n",
-    }
+    return {"broker_token": "signed-customer-step-up-token"}
 
 
 def _principal_with_issuer() -> AuthenticatedPrincipal:
@@ -216,11 +198,11 @@ def _principal_with_issuer() -> AuthenticatedPrincipal:
     )
 
 
-def test_database_session_endpoint_returns_certificate_for_matching_api_identity(
+def test_database_session_endpoint_returns_non_secret_lease(
     client: TestClient,
 ) -> None:
-    broker = FakeHumanSessionBroker()
-    app.state.database_session_broker = broker
+    issuer = FakeHumanSessionIssuer()
+    app.state.human_session_issuer = issuer
     app.dependency_overrides[get_current_principal] = _principal_with_issuer
 
     response = client.post(
@@ -230,30 +212,17 @@ def test_database_session_endpoint_returns_certificate_for_matching_api_identity
 
     assert response.status_code == 201
     assert response.json()["database_role"] == "pwr_finance_user_17"
-    assert response.json()["certificate_pem"].startswith("-----BEGIN CERTIFICATE-----")
-    assert broker.calls == [
-        ("signed-customer-step-up-token", _database_session_request()["csr_pem"])
+    assert "certificate_pem" not in response.json()
+    assert "private_key_pem" not in response.json()
+    assert issuer.calls == [
+        (_principal_with_issuer(), "signed-customer-step-up-token")
     ]
 
 
-def test_database_session_endpoint_rejects_broker_identity_mismatch(
+def test_database_session_endpoint_fails_closed_without_server_issuer(
     client: TestClient,
 ) -> None:
-    app.state.database_session_broker = FakeHumanSessionBroker(subject="different-user")
-    app.dependency_overrides[get_current_principal] = _principal_with_issuer
-
-    response = client.post(
-        "/api/v1/revenue/database-sessions",
-        json=_database_session_request(),
-    )
-
-    assert response.status_code == 403
-
-
-def test_database_session_endpoint_fails_closed_without_broker(
-    client: TestClient,
-) -> None:
-    app.state.database_session_broker = None
+    app.state.human_session_issuer = None
     app.dependency_overrides[get_current_principal] = _principal_with_issuer
 
     response = client.post(
@@ -267,7 +236,7 @@ def test_database_session_endpoint_fails_closed_without_broker(
 def test_database_session_endpoint_maps_replayed_assertion_to_conflict(
     client: TestClient,
 ) -> None:
-    app.state.database_session_broker = FakeHumanSessionBroker(
+    app.state.human_session_issuer = FakeHumanSessionIssuer(
         error=BrokerReplayError("already consumed")
     )
     app.dependency_overrides[get_current_principal] = _principal_with_issuer
@@ -283,7 +252,7 @@ def test_database_session_endpoint_maps_replayed_assertion_to_conflict(
 def test_database_session_endpoint_requires_finance_verifier_role(
     client: TestClient,
 ) -> None:
-    app.state.database_session_broker = FakeHumanSessionBroker()
+    app.state.human_session_issuer = FakeHumanSessionIssuer()
     app.dependency_overrides[get_current_principal] = lambda: AuthenticatedPrincipal(
         subject="analyst-01",
         tenant_id=TENANT_A,

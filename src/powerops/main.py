@@ -31,6 +31,9 @@ app = FastAPI(
 )
 
 
+# Customer broker adapters are injected by deployment configuration. No test or
+# in-memory implementation is enabled by default.
+app.state.database_session_broker = None
 app.state.revenue_assurance_repository = (
     PostgresRevenueAssuranceRepository(
         settings.database_url.get_secret_value(),

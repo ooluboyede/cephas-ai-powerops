@@ -8,10 +8,11 @@ and certificate paths produced by the customer-operated identity broker.
 from __future__ import annotations
 
 import stat
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from uuid import UUID
 import re
 
@@ -91,7 +92,7 @@ class PsycopgHumanSessionConnector:
             raise HumanSessionRejected("Customer private key permissions are too broad")
         return str(path)
 
-    def connect(self, principal: HumanSessionPrincipal) -> Any:
+    def connect(self, principal: HumanSessionPrincipal) -> AbstractContextManager[Any]:
         """Open a non-pooled TLS connection; callers must close it via its context."""
         try:
             credentials = self._credential_provider.get_credentials(principal)
@@ -124,7 +125,7 @@ class PsycopgHumanSessionConnector:
 
         # Role comes only from the trusted credential provider. No DSN, startup
         # options, GUC, SET ROLE or shared connection can override the identity.
-        return self._connect_factory(
+        connection = self._connect_factory(
             host=credentials.host,
             port=credentials.port,
             dbname=credentials.database_name,
@@ -137,3 +138,4 @@ class PsycopgHumanSessionConnector:
             application_name="cephas-powerops-human-session",
             autocommit=False,
         )
+        return cast(AbstractContextManager[Any], connection)

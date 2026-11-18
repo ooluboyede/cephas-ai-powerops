@@ -75,6 +75,7 @@ def actor_row(**overrides: object) -> dict[str, object]:
         "tenant_id": TENANT,
         "business_unit_id": BUSINESS_UNIT,
         "actor_subject": f"{ISSUER}|{SUBJECT}",
+        "finance_operator": False,
         "finance_verifier": True,
         **overrides,
     }
@@ -101,6 +102,7 @@ def test_verified_human_session_yields_only_after_database_identity_check() -> N
         {"tenant_id": UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")},
         {"business_unit_id": UUID("b1000000-0000-4000-8000-000000000001")},
         {"actor_subject": "https://identity.customer.example|different-user"},
+        {"finance_operator": True},
         {"finance_verifier": False},
     ],
 )

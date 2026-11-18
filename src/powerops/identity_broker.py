@@ -136,6 +136,17 @@ class CustomerCertificateIssuer(Protocol):
     ) -> str:
         """Sign a role-bound certificate using a customer-controlled CA/HSM."""
 
+    def verify_issued_certificate(
+        self,
+        certificate_pem: str,
+        *,
+        database_role: str,
+        public_key: PublicKeyTypes,
+        expires_at: datetime,
+        now: datetime,
+    ) -> bool:
+        """Verify the certificate signature and chain against customer trust anchors."""
+
 
 class OidcBrokerTokenVerifier:
     """Validate RS256 broker-audience tokens against the customer's OIDC JWKS."""
@@ -363,7 +374,14 @@ class DatabaseSessionBroker:
             )
             common_names = certificate.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
             if (
-                issued_public_key != requested_public_key
+                not self._certificate_issuer.verify_issued_certificate(
+                    certificate_pem,
+                    database_role=database_principal.database_role,
+                    public_key=public_key,
+                    expires_at=certificate_expiry,
+                    now=current,
+                )
+                or issued_public_key != requested_public_key
                 or len(common_names) != 1
                 or common_names[0].value != database_principal.database_role
                 or certificate.not_valid_before_utc > current

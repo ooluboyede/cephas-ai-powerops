@@ -127,7 +127,9 @@ class VaultBackedHumanPostgresCredentialProvider:
         if metadata.st_uid != os.geteuid():
             raise HumanSessionRejected("Customer secure temporary directory has the wrong owner")
         if stat.S_IMODE(metadata.st_mode) & 0o077:
-            raise HumanSessionRejected("Customer secure temporary directory permissions are too broad")
+            raise HumanSessionRejected(
+                "Customer secure temporary directory permissions are too broad"
+            )
 
         with tempfile.TemporaryDirectory(
             prefix="powerops-human-session-",

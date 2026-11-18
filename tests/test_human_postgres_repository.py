@@ -141,7 +141,9 @@ def test_verify_outcome_uses_distinct_human_verifier_session() -> None:
     repository = PostgresHumanRevenueAssuranceRepository(session)  # type: ignore[arg-type]
     verifier = principal(role="finance_verifier", subject="verifier-001")
 
-    result = repository.verify_recovery_outcome(verifier, SESSION_ID, uuid4(), verification_payload())
+    result = repository.verify_recovery_outcome(
+        verifier, SESSION_ID, uuid4(), verification_payload()
+    )
 
     assert result is not None
     assert result.verifier_subject == f"{ISSUER}|verifier-001"

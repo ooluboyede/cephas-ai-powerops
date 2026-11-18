@@ -26,6 +26,7 @@ class HumanSessionPrincipal:
     subject: str
     tenant_id: UUID
     business_unit_id: UUID
+    finance_operator: bool = False
     finance_verifier: bool = False
 
     def __post_init__(self) -> None:
@@ -54,8 +55,9 @@ class HumanDatabaseSession:
                actor.tenant_id,
                actor.business_unit_id,
                actor.actor_subject,
+               actor.finance_operator,
                actor.finance_verifier
-        FROM powerops_security.resolve_authenticated_human_actor() AS actor
+        FROM powerops_security.resolve_authenticated_human_actor_v2() AS actor
     """
 
     def __init__(self, connector: HumanSessionConnector) -> None:
@@ -76,6 +78,7 @@ class HumanDatabaseSession:
                     or row.get("tenant_id") != principal.tenant_id
                     or row.get("business_unit_id") != principal.business_unit_id
                     or row.get("actor_subject") != expected_subject
+                    or row.get("finance_operator") is not principal.finance_operator
                     or row.get("finance_verifier") is not principal.finance_verifier
                 ):
                     raise HumanSessionRejected(

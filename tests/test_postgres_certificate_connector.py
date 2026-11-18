@@ -9,6 +9,10 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
 
 from powerops.human_session_issuer import StoredHumanSessionCredential
 from powerops.human_sessions import HumanSessionPrincipal, HumanSessionRejected
@@ -95,6 +99,27 @@ class FakeCredentialStore:
 
 
 def stored_credentials(**overrides: object) -> StoredHumanSessionCredential:
+    now = datetime.now(UTC)
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    subject = x509.Name(
+        [x509.NameAttribute(NameOID.COMMON_NAME, "pwr_finance_user_17")]
+    )
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(private_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before((now - timedelta(minutes=1)).replace(tzinfo=None))
+        .not_valid_after((now + timedelta(minutes=2)).replace(tzinfo=None))
+        .sign(private_key, hashes.SHA256())
+    )
+    certificate_pem = certificate.public_bytes(serialization.Encoding.PEM).decode("ascii")
+    private_key_pem = private_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode("ascii")
     values: dict[str, object] = {
         "session_id": UUID("f0000000-0000-4000-8000-000000000006"),
         "issuer": ISSUER,
@@ -104,9 +129,9 @@ def stored_credentials(**overrides: object) -> StoredHumanSessionCredential:
         "finance_operator": False,
         "finance_verifier": True,
         "database_role": "pwr_finance_user_17",
-        "certificate_pem": "-----BEGIN CERTIFICATE-----\\nclient-cert\\n",
-        "private_key_pem": "-----BEGIN PRIVATE KEY-----\\nprivate-key\\n",
-        "expires_at": datetime.now(UTC) + timedelta(minutes=4),
+        "certificate_pem": certificate_pem,
+        "private_key_pem": private_key_pem,
+        "expires_at": now + timedelta(minutes=3),
     }
     values.update(overrides)
     return StoredHumanSessionCredential(**values)  # type: ignore[arg-type]
@@ -182,6 +207,51 @@ def test_vault_provider_rejects_another_session_id(
     with pytest.raises(HumanSessionRejected, match="do not match"):
         with provider.materialize_credentials(principal()):
             pytest.fail("A different lease must not be materialized")
+
+
+def test_vault_provider_rejects_mismatched_certificate_and_private_key(
+    tmp_path: Path,
+) -> None:
+    secure_temp = tmp_path / "secure-tmp"
+    secure_temp.mkdir(mode=0o700)
+    secure_temp.chmod(0o700)
+    wrong_key = ec.generate_private_key(ec.SECP256R1()).private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode("ascii")
+    provider = VaultBackedHumanPostgresCredentialProvider(
+        FakeCredentialStore(stored_credentials(private_key_pem=wrong_key)),
+        host="postgres.customer.example",
+        port=5432,
+        database_name="powerops",
+        root_certificate_path=tmp_path / "root.crt",
+        secure_temp_directory=secure_temp,
+    )
+
+    with pytest.raises(HumanSessionRejected, match="matching pair"):
+        with provider.materialize_credentials(principal()):
+            pytest.fail("Mismatched certificate/key pair must not be materialized")
+
+
+def test_vault_provider_rejects_certificate_for_another_database_role(
+    tmp_path: Path,
+) -> None:
+    secure_temp = tmp_path / "secure-tmp"
+    secure_temp.mkdir(mode=0o700)
+    secure_temp.chmod(0o700)
+    provider = VaultBackedHumanPostgresCredentialProvider(
+        FakeCredentialStore(stored_credentials(database_role="pwr_another_role")),
+        host="postgres.customer.example",
+        port=5432,
+        database_name="powerops",
+        root_certificate_path=tmp_path / "root.crt",
+        secure_temp_directory=secure_temp,
+    )
+
+    with pytest.raises(HumanSessionRejected, match="common name"):
+        with provider.materialize_credentials(principal()):
+            pytest.fail("Certificate CN must match the directory-assigned DB role")
 
 def test_vault_provider_rejects_world_accessible_temporary_directory(
     tmp_path: Path,

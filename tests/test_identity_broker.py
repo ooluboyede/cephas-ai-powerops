@@ -107,6 +107,41 @@ class DisposableCertificateIssuer:
         )
         return certificate.public_bytes(serialization.Encoding.PEM).decode("ascii")
 
+    def verify_issued_certificate(
+        self,
+        certificate_pem: str,
+        *,
+        database_role: str,
+        public_key: PublicKeyTypes,
+        expires_at: datetime,
+        now: datetime,
+    ) -> bool:
+        certificate = x509.load_pem_x509_certificate(certificate_pem.encode("ascii"))
+        try:
+            self.ca.public_key().verify(
+                certificate.signature,
+                certificate.tbs_certificate_bytes,
+                ec.ECDSA(certificate.signature_hash_algorithm),
+            )
+        except Exception:
+            return False
+        issued_key = certificate.public_key().public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        expected_key = public_key.public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        names = certificate.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+        return (
+            issued_key == expected_key
+            and len(names) == 1
+            and names[0].value == database_role
+            and certificate.not_valid_after_utc <= expires_at
+            and certificate.not_valid_after_utc > now
+        )
+
 
 def build_fixture() -> tuple[DatabaseSessionBroker, BrokerPrincipal, DisposableCertificateIssuer]:
     now = datetime.now(UTC)

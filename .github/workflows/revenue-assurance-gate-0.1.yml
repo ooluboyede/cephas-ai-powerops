@@ -81,6 +81,9 @@ jobs:
       - name: Human database session focused tests
         run: .venv/bin/pytest -q tests/test_human_sessions.py
 
+      - name: PostgreSQL certificate connector focused tests
+        run: .venv/bin/pytest -q tests/test_postgres_certificate_connector.py
+
       - name: Python tests
         run: .venv/bin/pytest
 

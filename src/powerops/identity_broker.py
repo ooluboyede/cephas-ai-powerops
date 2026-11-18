@@ -313,12 +313,17 @@ class DatabaseSessionBroker:
         if "finance_verifier" not in principal.roles:
             raise BrokerAuthorizationError("Finance-verifier entitlement is required")
 
-        database_principal = self._directory.resolve(
-            principal.issuer,
-            principal.subject,
-            principal.tenant_id,
-            principal.business_unit_id,
-        )
+        try:
+            database_principal = self._directory.resolve(
+                principal.issuer,
+                principal.subject,
+                principal.tenant_id,
+                principal.business_unit_id,
+            )
+        except Exception as exc:
+            raise BrokerDependencyUnavailable(
+                "Customer identity directory is unavailable"
+            ) from exc
         if database_principal is None or not database_principal.active:
             raise BrokerAuthorizationError("No active customer database identity exists")
         if (
@@ -342,7 +347,13 @@ class DatabaseSessionBroker:
 
         # Consume before signing. A signing failure requires a fresh token; the
         # broker never retries a consumed assertion with an untracked issuance.
-        if not self._replay_guard.consume(principal.jti, fingerprint, certificate_expiry):
+        try:
+            consumed = self._replay_guard.consume(
+                principal.jti, fingerprint, certificate_expiry
+            )
+        except Exception as exc:
+            raise BrokerDependencyUnavailable("Customer replay guard is unavailable") from exc
+        if not consumed:
             raise BrokerReplayError("Broker token identifier has already been consumed")
 
         try:
@@ -389,7 +400,7 @@ class DatabaseSessionBroker:
                 or certificate.not_valid_after_utc <= current
             ):
                 raise ValueError("Issued certificate does not match the approved session")
-        except (ValueError, UnicodeEncodeError, AttributeError) as exc:
+        except Exception as exc:
             raise BrokerDependencyUnavailable(
                 "Customer certificate issuer returned an unbound or invalid certificate"
             ) from exc

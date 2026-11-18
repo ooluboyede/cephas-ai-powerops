@@ -134,12 +134,19 @@ class HumanSessionCredentialStore(Protocol):
         private_key_pem: str,
         expires_at: datetime,
     ) -> None:
-        """Atomically create an immutable exact-session record. Identical retries are idempotent; conflicting UUID reuse raises HumanSessionCredentialConflict and never overwrites the original record."""
+        """Atomically create an immutable exact-session record.
+
+        Identical retries are idempotent. Conflicting UUID reuse raises
+        HumanSessionCredentialConflict and never overwrites the original record.
+        """
 
     def get_session(
         self, session_id: UUID
     ) -> StoredHumanSessionCredential | None:
-        """Return only the exact active session, or None if absent, expired or revoked; never search or fall back to another session."""
+        """Return only the exact active session, or None if absent, expired or revoked.
+
+        Never search or fall back to another session.
+        """
 
 
 class HumanSessionIssuer:

@@ -125,7 +125,9 @@ class HumanSessionIssuer:
         if not self._ROLE_PATTERN.fullmatch(issued.database_role):
             raise BrokerAuthorizationError("Broker returned an invalid database role")
         if "BEGIN CERTIFICATE" not in issued.certificate_pem:
-            raise BrokerDependencyUnavailable("Customer broker returned invalid certificate material")
+            raise BrokerDependencyUnavailable(
+                "Customer broker returned invalid certificate material"
+            )
 
         now = datetime.now(UTC)
         if issued.expires_at.tzinfo is None:

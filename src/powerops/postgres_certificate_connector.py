@@ -97,7 +97,9 @@ class PsycopgHumanSessionConnector:
         try:
             credentials = self._credential_provider.get_credentials(principal)
         except Exception as exc:
-            raise HumanSessionRejected("Customer human-session credentials are unavailable") from exc
+            raise HumanSessionRejected(
+                "Customer human-session credentials are unavailable"
+            ) from exc
 
         now = datetime.now(UTC)
         if (
@@ -106,7 +108,9 @@ class PsycopgHumanSessionConnector:
             or credentials.tenant_id != principal.tenant_id
             or credentials.business_unit_id != principal.business_unit_id
         ):
-            raise HumanSessionRejected("Customer certificate identity does not match the API principal")
+            raise HumanSessionRejected(
+                "Customer certificate identity does not match the API principal"
+            )
         if not self._ROLE_PATTERN.fullmatch(credentials.database_role):
             raise HumanSessionRejected("Customer directory returned an invalid database role")
         if not credentials.host.strip() or not credentials.database_name.strip():
@@ -117,7 +121,9 @@ class PsycopgHumanSessionConnector:
             raise HumanSessionRejected("Customer certificate expiry must be timezone-aware")
         expiry = credentials.expires_at.astimezone(UTC)
         if expiry <= now or expiry > now + self._MAX_CERTIFICATE_TTL:
-            raise HumanSessionRejected("Customer certificate is expired or exceeds the five-minute limit")
+            raise HumanSessionRejected(
+                "Customer certificate is expired or exceeds the five-minute limit"
+            )
 
         sslrootcert = self._require_file(credentials.root_certificate_path)
         sslcert = self._require_file(credentials.certificate_path)

@@ -124,6 +124,8 @@ class VaultBackedHumanPostgresCredentialProvider:
             ) from exc
         if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
             raise HumanSessionRejected("Customer secure temporary path must be a real directory")
+        if metadata.st_uid != os.geteuid():
+            raise HumanSessionRejected("Customer secure temporary directory has the wrong owner")
         if stat.S_IMODE(metadata.st_mode) & 0o077:
             raise HumanSessionRejected("Customer secure temporary directory permissions are too broad")
 

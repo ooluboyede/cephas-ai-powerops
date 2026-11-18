@@ -59,6 +59,7 @@ def issued_session(**overrides: object) -> IssuedDatabaseSession:
         "subject": SUBJECT,
         "tenant_id": TENANT,
         "business_unit_id": BUSINESS_UNIT,
+        "finance_operator": False,
         "finance_verifier": True,
     }
     values.update(overrides)
@@ -118,7 +119,43 @@ def test_session_issuer_fails_closed_if_customer_store_is_unavailable() -> None:
         issuer.create_session(principal=principal(), broker_token="fresh-step-up-token")
 
 
-def test_session_issuer_rejects_non_verifier_api_principal() -> None:
+
+def test_session_issuer_accepts_finance_operator_without_verifier_entitlement() -> None:
+    operator = AuthenticatedPrincipal(
+        subject=SUBJECT,
+        tenant_id=TENANT,
+        business_unit_id=BUSINESS_UNIT,
+        roles=frozenset({"finance_operator"}),
+        issuer=ISSUER,
+    )
+    broker = FakeBroker(issued_session(finance_operator=True, finance_verifier=False))
+    store = FakeCredentialStore()
+    issuer = HumanSessionIssuer(broker=broker, credential_store=store)
+
+    lease = issuer.create_session(principal=operator, broker_token="fresh-step-up-token")
+
+    assert lease.database_role == "pwr_finance_user_17"
+    assert store.values["finance_operator"] is True
+    assert store.values["finance_verifier"] is False
+
+
+def test_session_issuer_rejects_principal_with_both_finance_roles() -> None:
+    dual_role = AuthenticatedPrincipal(
+        subject=SUBJECT,
+        tenant_id=TENANT,
+        business_unit_id=BUSINESS_UNIT,
+        roles=frozenset({"finance_operator", "finance_verifier"}),
+        issuer=ISSUER,
+    )
+    issuer = HumanSessionIssuer(
+        broker=FakeBroker(issued_session()),
+        credential_store=FakeCredentialStore(),
+    )
+
+    with pytest.raises(BrokerAuthorizationError):
+        issuer.create_session(principal=dual_role, broker_token="fresh-step-up-token")
+
+def test_session_issuer_rejects_non_finance_api_principal() -> None:
     broker = FakeBroker(issued_session())
     store = FakeCredentialStore()
     issuer = HumanSessionIssuer(broker=broker, credential_store=store)

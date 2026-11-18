@@ -286,14 +286,15 @@ def test_oidc_broker_verifier_checks_signature_issuer_audience_and_step_up(
     )
 
     class SigningKey:
-        key = public_key
+        def __init__(self, key: object) -> None:
+            self.key = key
 
     class FakeJwksClient:
         def __init__(self, *args: object, **kwargs: object) -> None:
             pass
 
         def get_signing_key_from_jwt(self, token: str) -> SigningKey:
-            return SigningKey()
+            return SigningKey(public_key)
 
     monkeypatch.setattr(identity_broker, "PyJWKClient", FakeJwksClient)
     verifier = OidcBrokerTokenVerifier(policy)

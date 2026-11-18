@@ -202,7 +202,9 @@ class OidcBrokerTokenVerifier:
         issued = datetime.fromtimestamp(issued_at, UTC)
         expires = datetime.fromtimestamp(expires_at, UTC)
         authenticated = datetime.fromtimestamp(auth_time, UTC)
-        if expires <= issued or (expires - issued).total_seconds() > 900:\n            raise BrokerAuthenticationError("Broker token lifetime exceeds customer policy")\n        if (current - issued).total_seconds() > self._policy.max_token_age_seconds:
+        if expires <= issued or (expires - issued).total_seconds() > 900:
+            raise BrokerAuthenticationError("Broker token lifetime exceeds customer policy")
+        if (current - issued).total_seconds() > self._policy.max_token_age_seconds:
             raise BrokerAuthenticationError("Broker token exceeds the permitted age")
         if issued > current + timedelta(seconds=5):
             raise BrokerAuthenticationError("Broker token issue time is in the future")

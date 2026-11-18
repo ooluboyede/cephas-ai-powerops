@@ -133,4 +133,59 @@ if admin -c "UPDATE revenue_assurance.audit_events SET action='tampered'
   exit 1
 fi
 
+echo "[Revenue Assurance 0.1] Verify migration 0009 blocks legacy verified outcomes without inventing verifier evidence"
+admin <<'SQL'
+INSERT INTO revenue_assurance.investigation_cases
+(tenant_id,business_unit_id,case_id,finding_id,summary,opening_reason,created_by)
+VALUES
+('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ 'a1000000-0000-4000-8000-000000000001',
+ 'f1000000-0000-4000-8000-000000000001',
+ 'd1000000-0000-4000-8000-000000000001',
+ 'Legacy verification migration preflight fixture',
+ 'Synthetic fixture to prove rollout stops for legacy verified evidence',
+ 'ci-legacy-preflight-fixture');
+
+-- Simulate a pre-0008 row: only the direct-verified guard is disabled for
+-- this synthetic insert. The append-only trigger remains in force.
+ALTER TABLE revenue_assurance.recovery_outcomes
+    DISABLE TRIGGER recovery_outcomes_no_direct_verified;
+INSERT INTO revenue_assurance.recovery_outcomes
+(tenant_id,business_unit_id,outcome_id,case_id,amount,currency,outcome,
+ evidence_reference,recorded_by,verified_by,verified_at)
+VALUES
+('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ 'a1000000-0000-4000-8000-000000000001',
+ 'f2000000-0000-4000-8000-000000000002',
+ 'f1000000-0000-4000-8000-000000000001',
+ 1000.0000,'NGN','verified','synthetic-legacy-evidence',
+ 'legacy-recorder','legacy-verifier',now());
+ALTER TABLE revenue_assurance.recovery_outcomes
+    ENABLE TRIGGER recovery_outcomes_no_direct_verified;
+SQL
+
+if preflight_output=$(admin -f migrations/postgresql/0009_recovery_verification_rollout.sql 2>&1); then
+  echo "FAIL: migration 0009 accepted a legacy verified recovery outcome" >&2
+  exit 1
+elif [[ "$preflight_output" == *"legacy verified recovery outcome(s) require customer reconciliation"* ]]; then
+  echo "[Revenue Assurance 0.1] PASS — legacy verified outcome correctly blocks rollout"
+else
+  echo "$preflight_output" >&2
+  echo "FAIL: migration 0009 failed for a reason other than the expected legacy-data preflight" >&2
+  exit 1
+fi
+
+admin <<'SQL'
+-- Remove only the synthetic fixture. The immutable production triggers are
+-- restored immediately after cleanup.
+ALTER TABLE revenue_assurance.recovery_outcomes
+    DISABLE TRIGGER recovery_outcomes_no_update;
+DELETE FROM revenue_assurance.recovery_outcomes
+ WHERE outcome_id='f2000000-0000-4000-8000-000000000002';
+ALTER TABLE revenue_assurance.recovery_outcomes
+    ENABLE TRIGGER recovery_outcomes_no_update;
+DELETE FROM revenue_assurance.investigation_cases
+ WHERE case_id='f1000000-0000-4000-8000-000000000001';
+SQL
+
 echo "[Revenue Assurance 0.1] PASS — domain migration, BU RLS visibility, cross-BU write denial and audit immutability verified"

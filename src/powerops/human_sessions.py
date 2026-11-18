@@ -7,10 +7,10 @@ multiplex connections between human identities.
 """
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import AbstractContextManager, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, ContextManager, Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 
@@ -42,7 +42,7 @@ class HumanSessionConnector(Protocol):
     by this caller.
     """
 
-    def connect(self, principal: HumanSessionPrincipal) -> ContextManager[Any]:
+    def connect(self, principal: HumanSessionPrincipal) -> AbstractContextManager[Any]:
         """Open and close one database connection for this human principal."""
 
 

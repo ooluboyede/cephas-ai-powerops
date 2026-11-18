@@ -41,4 +41,5 @@ No Vault SDK, endpoint, token, namespace, mount, PKI issuer or policy is assumed
 - Unit tests reject malformed credential records and non-exclusive finance entitlements.
 - Existing issuance and certificate materialization tests remain regression coverage.
 - CI must pass configured Python quality/test jobs before this gate is accepted.
+- The CI rerun is bound to the corrected branch head after the initial lint findings were fixed.
 - Customer-provider integration and independent security review remain separate acceptance requirements.

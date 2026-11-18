@@ -56,6 +56,7 @@ BEGIN
         'GRANT EXECUTE ON FUNCTION powerops_security.resolve_authenticated_human_actor_v2() TO %I',
         p_role_name
     );
+    PERFORM powerops_security.grant_revenue_assurance_access(p_role_name);
 
     RETURN v_role_oid;
 END

@@ -148,6 +148,8 @@ def test_session_uuid_cannot_be_rebound_to_changed_credential(
         changed[changed_field] = "-----BEGIN CERTIFICATE-----\\nchanged-certificate"
     elif changed_field == "private_key_pem":
         changed[changed_field] = "-----BEGIN PRIVATE KEY-----\\nchanged-private-key"
+    elif changed_field == "database_role":
+        changed[changed_field] = "pwr_changed_role"
     else:
         changed[changed_field] = f"changed-{changed_field}"
 

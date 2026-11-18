@@ -183,7 +183,7 @@ class OidcBrokerTokenVerifier:
         issued_at = claims.get("iat")
         expires_at = claims.get("exp")
         if (
-            not isinstance(subject, str) or not subject.strip()
+            not isinstance(subject, str) or not subject.strip() or len(subject) > 200
             or not isinstance(jti, str) or not jti.strip() or len(jti) > 512
             or not isinstance(tenant_claim, str)
             or not isinstance(business_unit_claim, str)
@@ -199,9 +199,14 @@ class OidcBrokerTokenVerifier:
             raise BrokerAuthenticationError("Required broker identity claims are missing")
 
         current = now.astimezone(UTC)
-        issued = datetime.fromtimestamp(issued_at, UTC)
-        expires = datetime.fromtimestamp(expires_at, UTC)
-        authenticated = datetime.fromtimestamp(auth_time, UTC)
+        try:
+            issued = datetime.fromtimestamp(issued_at, UTC)
+            expires = datetime.fromtimestamp(expires_at, UTC)
+            authenticated = datetime.fromtimestamp(auth_time, UTC)
+        except (OverflowError, OSError, ValueError) as exc:
+            raise BrokerAuthenticationError(
+                "Broker token time claim is outside the supported range"
+            ) from exc
         if expires <= issued or (expires - issued).total_seconds() > 900:
             raise BrokerAuthenticationError("Broker token lifetime exceeds customer policy")
         if (current - issued).total_seconds() > self._policy.max_token_age_seconds:
@@ -260,6 +265,8 @@ class DatabaseSessionBroker:
 
     @staticmethod
     def _validated_csr(csr_pem: str) -> tuple[PublicKeyTypes, str]:
+        if len(csr_pem) > 16_384:
+            raise BrokerAuthenticationError("CSR exceeds the permitted size")
         try:
             csr = x509.load_pem_x509_csr(csr_pem.encode("ascii"))
         except (ValueError, UnicodeEncodeError) as exc:
@@ -286,9 +293,10 @@ class DatabaseSessionBroker:
     def issue_session(
         self, *, token: str, csr_pem: str, now: datetime | None = None
     ) -> IssuedDatabaseSession:
-        current = (now or datetime.now(UTC)).astimezone(UTC)
-        if current.tzinfo is None:
+        supplied_now = now or datetime.now(UTC)
+        if supplied_now.tzinfo is None:
             raise ValueError("Broker clock must be timezone-aware")
+        current = supplied_now.astimezone(UTC)
 
         principal = self._token_verifier.verify(token, now=current)
         if "finance_verifier" not in principal.roles:
@@ -343,6 +351,30 @@ class DatabaseSessionBroker:
 
         if not isinstance(certificate_pem, str) or "BEGIN CERTIFICATE" not in certificate_pem:
             raise BrokerDependencyUnavailable("Customer certificate issuer returned invalid material")
+        try:
+            certificate = x509.load_pem_x509_certificate(certificate_pem.encode("ascii"))
+            issued_public_key = certificate.public_key().public_bytes(
+                serialization.Encoding.DER,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            requested_public_key = public_key.public_bytes(
+                serialization.Encoding.DER,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            common_names = certificate.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+            if (
+                issued_public_key != requested_public_key
+                or len(common_names) != 1
+                or common_names[0].value != database_principal.database_role
+                or certificate.not_valid_before_utc > current
+                or certificate.not_valid_after_utc > certificate_expiry
+                or certificate.not_valid_after_utc <= current
+            ):
+                raise ValueError("Issued certificate does not match the approved session")
+        except (ValueError, UnicodeEncodeError, AttributeError) as exc:
+            raise BrokerDependencyUnavailable(
+                "Customer certificate issuer returned an unbound or invalid certificate"
+            ) from exc
 
         return IssuedDatabaseSession(
             certificate_pem=certificate_pem,

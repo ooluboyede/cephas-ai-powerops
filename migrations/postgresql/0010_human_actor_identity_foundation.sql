@@ -146,7 +146,17 @@ BEGIN
        SET active = false, revoked_at = pg_catalog.clock_timestamp(),
            revoked_by = session_user, revocation_reason = p_revocation_reason
      WHERE cluster_id = v_cluster_id AND role_oid = v_role_oid;
-    PERFORM powerops_security.retire_scope_login(p_role_name, p_revocation_reason);
+    INSERT INTO powerops_security.retired_role_identity (
+        cluster_id, role_oid, role_name, retirement_reason
+    ) VALUES (
+        v_cluster_id, v_role_oid, p_role_name, p_revocation_reason
+    ) ON CONFLICT DO NOTHING;
+
+    UPDATE powerops_security.role_scope_binding
+       SET active = false
+     WHERE cluster_id = v_cluster_id AND role_oid = v_role_oid;
+
+    EXECUTE pg_catalog.format('ALTER ROLE %I NOLOGIN', p_role_name);
 END
 $function$;
 

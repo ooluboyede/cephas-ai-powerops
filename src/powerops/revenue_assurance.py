@@ -157,6 +157,7 @@ class HumanRevenueAssuranceRepository(Protocol):
     def record_recovery_outcome(
         self,
         principal: AuthenticatedPrincipal,
+        session_id: UUID,
         case_id: UUID,
         payload: RecoveryOutcomeCreate,
     ) -> RecoveryOutcomeRead | None: ...
@@ -164,6 +165,7 @@ class HumanRevenueAssuranceRepository(Protocol):
     def verify_recovery_outcome(
         self,
         principal: AuthenticatedPrincipal,
+        session_id: UUID,
         outcome_id: UUID,
         payload: RecoveryVerificationCreate,
     ) -> RecoveryVerificationRead | None: ...
@@ -395,11 +397,14 @@ def record_decision(
 def record_recovery_outcome(
     case_id: UUID,
     payload: RecoveryOutcomeCreate,
+    session_id: UUID = Header(alias="X-CEPHAS-DB-Session"),
     principal: AuthenticatedPrincipal = Depends(get_current_principal),
     repository: HumanRevenueAssuranceRepository = Depends(get_human_repository),
 ) -> RecoveryOutcomeRead:
     _require_exclusive_finance_role(principal, "finance_operator", "finance_verifier")
-    outcome = repository.record_recovery_outcome(principal, case_id, payload)
+    outcome = repository.record_recovery_outcome(
+        principal, session_id, case_id, payload
+    )
     if outcome is None:
         raise HTTPException(status_code=404, detail="Investigation case not found")
     return outcome
@@ -413,12 +418,13 @@ def record_recovery_outcome(
 def verify_recovery_outcome(
     outcome_id: UUID,
     payload: RecoveryVerificationCreate,
+    session_id: UUID = Header(alias="X-CEPHAS-DB-Session"),
     principal: AuthenticatedPrincipal = Depends(get_current_principal),
     repository: HumanRevenueAssuranceRepository = Depends(get_human_repository),
 ) -> RecoveryVerificationRead:
     _require_exclusive_finance_role(principal, "finance_verifier", "finance_operator")
     verification = repository.verify_recovery_outcome(
-        principal, outcome_id, payload
+        principal, session_id, outcome_id, payload
     )
     if verification is None:
         raise HTTPException(status_code=404, detail="Recovery outcome not found")

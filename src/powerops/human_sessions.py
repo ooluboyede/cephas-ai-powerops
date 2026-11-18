@@ -71,12 +71,12 @@ class HumanDatabaseSession:
                 row = connection.execute(self._IDENTITY_QUERY).fetchone()
                 expected_subject = f"{principal.issuer}|{principal.subject}"
                 if (
-                    row is None
-                    or row["role_unchanged"] is not True
-                    or row["tenant_id"] != principal.tenant_id
-                    or row["business_unit_id"] != principal.business_unit_id
-                    or row["actor_subject"] != expected_subject
-                    or row["finance_verifier"] is not principal.finance_verifier
+                    not isinstance(row, dict)
+                    or row.get("role_unchanged") is not True
+                    or row.get("tenant_id") != principal.tenant_id
+                    or row.get("business_unit_id") != principal.business_unit_id
+                    or row.get("actor_subject") != expected_subject
+                    or row.get("finance_verifier") is not principal.finance_verifier
                 ):
                     raise HumanSessionRejected(
                         "PostgreSQL session identity does not match the verified human"

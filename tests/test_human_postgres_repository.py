@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Iterator
+from typing import Iterator
 from uuid import UUID, uuid4
 
 import pytest
@@ -11,7 +11,6 @@ from fastapi import HTTPException
 
 from powerops.auth import AuthenticatedPrincipal
 from powerops.human_postgres_repository import PostgresHumanRevenueAssuranceRepository
-from powerops.human_sessions import HumanDatabaseSession
 from powerops.revenue_assurance import RecoveryOutcomeCreate, RecoveryVerificationCreate
 
 TENANT = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
@@ -33,7 +32,7 @@ class FakeConnection:
     def __init__(self, *, case: dict[str, object] | None = None,
                  outcome: dict[str, object] | None = None,
                  inserted_outcome: dict[str, object] | None = None,
-                 inserted_verification: dict[str, object] | None = None) -> None:
+                 duplicate_verification: bool = False) -> None:
         self.case = case or {"case_status": "approved"}
         self.outcome = outcome or {"recorded_by": f"{ISSUER}|maker-001"}
         self.inserted_outcome = inserted_outcome or {
@@ -45,14 +44,18 @@ class FakeConnection:
             "recorded_by": f"{ISSUER}|maker-001",
             "recorded_at": datetime.now(UTC),
         }
-        self.inserted_verification = inserted_verification or {
-            "verification_id": uuid4(),
-            "outcome_id": uuid4(),
-            "verifier_subject": f"{ISSUER}|verifier-001",
-            "evidence_reference": "bank-confirmation",
-            "reason": "Independent bank confirmation reconciled.",
-            "verified_at": datetime.now(UTC),
-        }
+        self.inserted_verification = (
+            None
+            if duplicate_verification
+            else {
+                "verification_id": uuid4(),
+                "outcome_id": uuid4(),
+                "verifier_subject": f"{ISSUER}|verifier-001",
+                "evidence_reference": "bank-confirmation",
+                "reason": "Independent bank confirmation reconciled.",
+                "verified_at": datetime.now(UTC),
+            }
+        )
         self.calls: list[tuple[str, tuple[object, ...] | None]] = []
 
     def execute(self, query: str, params: tuple[object, ...] | None = None) -> FakeConnection:
@@ -117,7 +120,8 @@ def test_record_outcome_uses_human_session_and_database_derived_audit_actor() ->
         if "INSERT INTO revenue_assurance.recovery_outcomes" in call[0]
     )
     assert "recorded_by)" in insert_query
-    assert insert_params is not None and insert_params[-1] is None
+    assert insert_params is not None and len(insert_params) == 8
+    assert "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NULL)" in insert_query
     audit_query, _ = next(
         call for call in connection.calls
         if "INSERT INTO revenue_assurance.audit_events" in call[0]
@@ -151,7 +155,8 @@ def test_verify_outcome_uses_distinct_human_verifier_session() -> None:
         if "INSERT INTO revenue_assurance.recovery_verifications" in call[0]
     )
     assert "verifier_subject" in insert_query
-    assert insert_params is not None and insert_params[4] is None
+    assert insert_params is not None and insert_params[4] == "bank-confirmation"
+    assert "VALUES (%s, %s, %s, %s, NULL, %s, %s)" in insert_query
 
 
 @pytest.mark.parametrize(
@@ -201,7 +206,7 @@ def test_verifier_cannot_verify_own_database_derived_outcome() -> None:
 
 
 def test_duplicate_verification_returns_conflict_before_audit_append() -> None:
-    connection = FakeConnection(inserted_verification=None)
+    connection = FakeConnection(duplicate_verification=True)
     session = FakeHumanSession(connection)  # type: ignore[arg-type]
     repository = PostgresHumanRevenueAssuranceRepository(session)  # type: ignore[arg-type]
     verifier = principal(role="finance_verifier", subject="verifier-001")

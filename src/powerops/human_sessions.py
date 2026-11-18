@@ -7,10 +7,10 @@ multiplex connections between human identities.
 """
 from __future__ import annotations
 
-from collections.abc import AbstractContextManager, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import AbstractContextManager, Any, Protocol
 from uuid import UUID
 
 

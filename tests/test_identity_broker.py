@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
 from uuid import UUID
 
 import pytest
@@ -62,7 +61,7 @@ class InMemoryReplayGuard:
         return True
 
 
-class TestCertificateIssuer:
+class DisposableCertificateIssuer:
     """Disposable test CA; never use this implementation in customer deployments."""
 
     def __init__(self) -> None:
@@ -105,7 +104,7 @@ class TestCertificateIssuer:
         return certificate.public_bytes(serialization.Encoding.PEM).decode("ascii")
 
 
-def build_fixture() -> tuple[DatabaseSessionBroker, BrokerPrincipal, TestCertificateIssuer]:
+def build_fixture() -> tuple[DatabaseSessionBroker, BrokerPrincipal, DisposableCertificateIssuer]:
     now = datetime.now(UTC)
     principal = BrokerPrincipal(
         issuer=ISSUER,
@@ -129,7 +128,7 @@ def build_fixture() -> tuple[DatabaseSessionBroker, BrokerPrincipal, TestCertifi
         active=True,
         finance_verifier=True,
     )
-    signer = TestCertificateIssuer()
+    signer = DisposableCertificateIssuer()
     broker = DatabaseSessionBroker(
         policy=BrokerPolicy(
             issuer=ISSUER,

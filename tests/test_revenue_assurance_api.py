@@ -162,7 +162,7 @@ def client() -> Iterator[TestClient]:
         yield test_client
     app.dependency_overrides.clear()
     app.state.revenue_assurance_repository = None
-    app.state.database_session_broker = None
+    app.state.human_session_issuer = None
 
 
 
@@ -218,6 +218,29 @@ def test_database_session_endpoint_returns_non_secret_lease(
         (_principal_with_issuer(), "signed-customer-step-up-token")
     ]
 
+
+
+def test_database_session_endpoint_accepts_finance_operator_role(
+    client: TestClient,
+) -> None:
+    issuer = FakeHumanSessionIssuer()
+    app.state.human_session_issuer = issuer
+    operator = AuthenticatedPrincipal(
+        subject="maker-user-01",
+        tenant_id=TENANT_A,
+        business_unit_id=BU_A1,
+        roles=frozenset({"finance_operator"}),
+        issuer=ISSUER,
+    )
+    app.dependency_overrides[get_current_principal] = lambda: operator
+
+    response = client.post(
+        "/api/v1/revenue/database-sessions",
+        json=_database_session_request(),
+    )
+
+    assert response.status_code == 201
+    assert issuer.calls == [(operator, "signed-customer-step-up-token")]
 
 def test_database_session_endpoint_fails_closed_without_server_issuer(
     client: TestClient,

@@ -134,15 +134,7 @@ def test_record_outcome_uses_human_session_and_database_derived_audit_actor() ->
 
 def test_verify_outcome_uses_distinct_human_verifier_session() -> None:
     connection = FakeConnection(
-        outcome={"recorded_by": f"{ISSUER}|maker-001"},
-        inserted_verification={
-            "verification_id": uuid4(),
-            "outcome_id": uuid4(),
-            "verifier_subject": f"{ISSUER}|verifier-001",
-            "evidence_reference": "bank-confirmation",
-            "reason": "Independent bank confirmation reconciled.",
-            "verified_at": datetime.now(UTC),
-        },
+        outcome={"recorded_by": f"{ISSUER}|maker-001"}
     )
     session = FakeHumanSession(connection)  # type: ignore[arg-type]
     repository = PostgresHumanRevenueAssuranceRepository(session)  # type: ignore[arg-type]

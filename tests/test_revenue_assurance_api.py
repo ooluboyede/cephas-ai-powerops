@@ -435,6 +435,7 @@ def test_recovery_recording_and_verification_are_separate(client: TestClient) ->
 def test_recovery_recorder_cannot_verify_own_outcome(client: TestClient) -> None:
     recorded = client.post(
         f"/api/v1/revenue/cases/{CASE_ID}/recovery-outcomes",
+        headers={"X-CEPHAS-DB-Session": str(SESSION_ID)},
         json={
             "amount": "1000.2500",
             "currency": "NGN",
@@ -451,6 +452,7 @@ def test_recovery_recorder_cannot_verify_own_outcome(client: TestClient) -> None
     )
     response = client.post(
         f"/api/v1/revenue/recovery-outcomes/{outcome_id}/verification",
+        headers={"X-CEPHAS-DB-Session": str(SESSION_ID)},
         json={
             "evidence_reference": "same-actor-evidence",
             "reason": "Attempted self-verification must fail.",
@@ -462,6 +464,7 @@ def test_recovery_recorder_cannot_verify_own_outcome(client: TestClient) -> None
 def test_verified_outcome_cannot_be_submitted_directly(client: TestClient) -> None:
     response = client.post(
         f"/api/v1/revenue/cases/{CASE_ID}/recovery-outcomes",
+        headers={"X-CEPHAS-DB-Session": str(SESSION_ID)},
         json={
             "amount": "1000.2500",
             "currency": "NGN",

@@ -43,8 +43,25 @@ class HumanSessionBroker(Protocol):
         """Validate the broker token and return a short-lived role-bound certificate."""
 
 
+@dataclass(frozen=True, slots=True)
+class StoredHumanSessionCredential:
+    """Decrypted session material returned transiently by a customer vault."""
+
+    session_id: UUID
+    issuer: str
+    subject: str
+    tenant_id: UUID
+    business_unit_id: UUID
+    finance_operator: bool
+    finance_verifier: bool
+    database_role: str
+    certificate_pem: str
+    private_key_pem: str
+    expires_at: datetime
+
+
 class HumanSessionCredentialStore(Protocol):
-    """Customer-controlled store for session certificates and private keys."""
+    """Customer-controlled encrypted store for session certificates and keys."""
 
     def store_session(
         self,
@@ -62,6 +79,11 @@ class HumanSessionCredentialStore(Protocol):
         expires_at: datetime,
     ) -> None:
         """Persist credentials securely; encrypt private keys at rest and enforce TTL."""
+
+    def get_session(
+        self, session_id: UUID
+    ) -> StoredHumanSessionCredential | None:
+        """Return one unexpired session after customer-vault access checks."""
 
 
 class HumanSessionIssuer:

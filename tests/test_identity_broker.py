@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
-from powerops.identity_broker import (
+import jwt\n\nimport powerops.identity_broker as identity_broker\nfrom powerops.identity_broker import (
     BrokerAuthenticationError,
     BrokerAuthorizationError,
     BrokerPolicy,
@@ -225,3 +225,70 @@ def test_broker_does_not_use_csr_subject_as_database_role() -> None:
     certificate = x509.load_pem_x509_certificate(issued.certificate_pem.encode("ascii"))
     common_name = certificate.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
     assert common_name[0].value == "pwr_finance_user_001"
+
+
+def test_oidc_broker_verifier_checks_signature_issuer_audience_and_step_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+    private_pem = private_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    now = datetime.now(UTC)
+    policy = BrokerPolicy(
+        issuer=ISSUER,
+        audience="powerops-db-session-broker",
+        jwks_url="https://idp.customer.example/.well-known/jwks.json",
+        allowed_acrs=frozenset({"urn:customer:loa:2"}),
+        required_amr=frozenset({"mfa"}),
+    )
+
+    class SigningKey:
+        key = public_key
+
+    class FakeJwksClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def get_signing_key_from_jwt(self, token: str) -> SigningKey:
+            return SigningKey()
+
+    monkeypatch.setattr(identity_broker, "PyJWKClient", FakeJwksClient)
+    verifier = OidcBrokerTokenVerifier(policy)
+    claims = {
+        "iss": ISSUER,
+        "aud": "powerops-db-session-broker",
+        "sub": SUBJECT,
+        "tenant_id": str(TENANT),
+        "business_unit_id": str(BUSINESS_UNIT),
+        "roles": ["finance_verifier"],
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=4)).timestamp()),
+        "auth_time": int(now.timestamp()),
+        "acr": "urn:customer:loa:2",
+        "amr": ["pwd", "mfa"],
+        "jti": "cryptographically-signed-one-time-id",
+    }
+    token = jwt.encode(claims, private_pem, algorithm="RS256")
+    verified = verifier.verify(token, now=now)
+    assert verified.subject == SUBJECT
+    assert verified.tenant_id == TENANT
+    assert verified.business_unit_id == BUSINESS_UNIT
+    assert "finance_verifier" in verified.roles
+
+    wrong_audience = jwt.encode(
+        {**claims, "aud": "powerops-api"}, private_pem, algorithm="RS256"
+    )
+    with pytest.raises(BrokerAuthenticationError):
+        verifier.verify(wrong_audience, now=now)
+
+    insufficient_step_up = jwt.encode(
+        {**claims, "amr": ["pwd"], "jti": "different-jti"},
+        private_pem,
+        algorithm="RS256",
+    )
+    with pytest.raises(BrokerAuthenticationError):
+        verifier.verify(insufficient_step_up, now=now)

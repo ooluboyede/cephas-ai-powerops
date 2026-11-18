@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Iterator
+from collections.abc import Iterator
 from uuid import UUID, uuid4
 
 import pytest
@@ -18,7 +18,9 @@ BUSINESS_UNIT = UUID("a1000000-0000-4000-8000-000000000001")
 ISSUER = "https://identity.customer.example"
 
 
-def principal(*, role: str = "finance_operator", subject: str = "maker-001") -> AuthenticatedPrincipal:
+def principal(
+    *, role: str = "finance_operator", subject: str = "maker-001"
+) -> AuthenticatedPrincipal:
     return AuthenticatedPrincipal(
         issuer=ISSUER,
         subject=subject,

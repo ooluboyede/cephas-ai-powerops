@@ -157,6 +157,8 @@ ALTER FUNCTION powerops_security.revoke_human_actor_login(name, text)
     OWNER TO powerops_provisioner;
 
 REVOKE ALL ON FUNCTION powerops_security.resolve_authenticated_human_actor() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION powerops_security.resolve_authenticated_human_actor()
+    TO powerops_provisioner WITH GRANT OPTION;
 REVOKE ALL ON FUNCTION powerops_security.provision_human_actor_login(
     name, uuid, uuid, text, text, boolean, timestamptz
 ) FROM PUBLIC;

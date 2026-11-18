@@ -418,7 +418,7 @@ def record_recovery_outcome(
 def verify_recovery_outcome(
     outcome_id: UUID,
     payload: RecoveryVerificationCreate,
-    session_id: UUID = Header(alias="X-CEPHAS-DB-Session"),
+    session_id: Annotated[UUID, Header(alias="X-CEPHAS-DB-Session")],
     principal: AuthenticatedPrincipal = Depends(get_current_principal),
     repository: HumanRevenueAssuranceRepository = Depends(get_human_repository),
 ) -> RecoveryVerificationRead:

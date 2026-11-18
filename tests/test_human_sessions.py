@@ -61,6 +61,7 @@ class FakeConnector:
 
 def principal(*, finance_verifier: bool = True) -> HumanSessionPrincipal:
     return HumanSessionPrincipal(
+        session_id=UUID("f0000000-0000-4000-8000-000000000006"),
         issuer=ISSUER,
         subject=SUBJECT,
         tenant_id=TENANT,
@@ -135,6 +136,7 @@ def test_missing_database_actor_mapping_fails_closed() -> None:
 def test_principal_requires_https_issuer_and_subject() -> None:
     with pytest.raises(ValueError):
         HumanSessionPrincipal(
+            session_id=UUID("f0000000-0000-4000-8000-000000000006"),
             issuer="http://identity.customer.example",
             subject=SUBJECT,
             tenant_id=TENANT,
@@ -142,6 +144,7 @@ def test_principal_requires_https_issuer_and_subject() -> None:
         )
     with pytest.raises(ValueError):
         HumanSessionPrincipal(
+            session_id=UUID("f0000000-0000-4000-8000-000000000006"),
             issuer=ISSUER,
             subject=" ",
             tenant_id=TENANT,

@@ -397,7 +397,7 @@ def record_decision(
 def record_recovery_outcome(
     case_id: UUID,
     payload: RecoveryOutcomeCreate,
-    session_id: UUID = Header(alias="X-CEPHAS-DB-Session"),
+    session_id: Annotated[UUID, Header(alias="X-CEPHAS-DB-Session")],
     principal: AuthenticatedPrincipal = Depends(get_current_principal),
     repository: HumanRevenueAssuranceRepository = Depends(get_human_repository),
 ) -> RecoveryOutcomeRead:

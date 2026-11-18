@@ -31,8 +31,8 @@ app = FastAPI(
 )
 
 
-# Customer broker adapters are injected by deployment configuration. No test or
-# in-memory implementation is enabled by default.
+# The customer session issuer, broker and credential store are injected by
+# deployment configuration. No test or in-memory implementation is enabled.
 app.state.human_session_issuer = None
 app.state.revenue_assurance_repository = (
     PostgresRevenueAssuranceRepository(

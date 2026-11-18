@@ -159,6 +159,30 @@ def test_vault_provider_rejects_credentials_for_another_human(
             pytest.fail("Mismatched stored session must not materialize")
 
 
+
+def test_vault_provider_rejects_another_session_id(
+    tmp_path: Path,
+) -> None:
+    secure_temp = tmp_path / "secure-tmp"
+    secure_temp.mkdir(mode=0o700)
+    secure_temp.chmod(0o700)
+    provider = VaultBackedHumanPostgresCredentialProvider(
+        FakeCredentialStore(
+            stored_credentials(
+                session_id=UUID("f0000000-0000-4000-8000-000000000099")
+            )
+        ),
+        host="postgres.customer.example",
+        port=5432,
+        database_name="powerops",
+        root_certificate_path=tmp_path / "root.crt",
+        secure_temp_directory=secure_temp,
+    )
+
+    with pytest.raises(HumanSessionRejected, match="do not match"):
+        with provider.materialize_credentials(principal()):
+            pytest.fail("A different lease must not be materialized")
+
 def test_vault_provider_rejects_world_accessible_temporary_directory(
     tmp_path: Path,
 ) -> None:
@@ -204,6 +228,7 @@ def test_connector_opens_fresh_verify_full_tls_connection(tmp_path: Path) -> Non
 @pytest.mark.parametrize(
     "overrides",
     [
+        {"session_id": UUID("f0000000-0000-4000-8000-000000000099")},
         {"issuer": "https://other.customer.example"},
         {"subject": "different-user"},
         {"tenant_id": UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")},

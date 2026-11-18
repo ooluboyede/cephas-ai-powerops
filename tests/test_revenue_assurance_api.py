@@ -461,6 +461,21 @@ def test_recovery_recorder_cannot_verify_own_outcome(client: TestClient) -> None
     assert response.status_code == 409
 
 
+
+def test_recovery_write_requires_an_issued_session_lease_header(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        f"/api/v1/revenue/cases/{CASE_ID}/recovery-outcomes",
+        json={
+            "amount": "1000.2500",
+            "currency": "NGN",
+            "outcome": "reported",
+            "evidence_reference": "bank-receipt-123",
+        },
+    )
+    assert response.status_code == 422
+
 def test_verified_outcome_cannot_be_submitted_directly(client: TestClient) -> None:
     response = client.post(
         f"/api/v1/revenue/cases/{CASE_ID}/recovery-outcomes",

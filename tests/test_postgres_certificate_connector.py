@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from collections.abc import Iterator
 from typing import Any
 from uuid import UUID
 
@@ -22,6 +24,7 @@ BUSINESS_UNIT = UUID("a1000000-0000-4000-8000-000000000001")
 
 def principal() -> HumanSessionPrincipal:
     return HumanSessionPrincipal(
+        session_id=UUID("f0000000-0000-4000-8000-000000000006"),
         issuer=ISSUER,
         subject=SUBJECT,
         tenant_id=TENANT,
@@ -34,12 +37,19 @@ def principal() -> HumanSessionPrincipal:
 class FakeProvider:
     credentials: HumanPostgresCredentials
 
-    def get_credentials(self, principal_value: HumanSessionPrincipal) -> HumanPostgresCredentials:
-        return self.credentials
+    @contextmanager
+    def materialize_credentials(
+        self, principal_value: HumanSessionPrincipal
+    ) -> Iterator[HumanPostgresCredentials]:
+        yield self.credentials
 
 
 class FakeConnection:
-    pass
+    def __enter__(self) -> FakeConnection:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
 
 
 def credentials(tmp_path: Path, **overrides: object) -> HumanPostgresCredentials:
@@ -51,6 +61,7 @@ def credentials(tmp_path: Path, **overrides: object) -> HumanPostgresCredentials
     root.write_text("test root", encoding="utf-8")
     key.chmod(0o600)
     values: dict[str, object] = {
+        "session_id": UUID("f0000000-0000-4000-8000-000000000006"),
         "issuer": ISSUER,
         "subject": SUBJECT,
         "tenant_id": TENANT,
@@ -81,7 +92,8 @@ def test_connector_opens_fresh_verify_full_tls_connection(tmp_path: Path) -> Non
     provider = FakeProvider(credentials(tmp_path))
     connector = PsycopgHumanSessionConnector(provider, connect_factory=connect_factory)
 
-    assert connector.connect(principal()) is connection
+    with connector.connect(principal()) as opened:
+        assert opened is connection
     assert captured["user"] == "pwr_finance_user_17"
     assert captured["sslmode"] == "verify-full"
     assert captured["sslcert"].endswith("human.crt")
@@ -123,7 +135,8 @@ def test_connector_rejects_untrusted_or_invalid_credentials(
         connect_factory=connect_factory,
     )
     with pytest.raises(HumanSessionRejected):
-        connector.connect(principal())
+        with connector.connect(principal()):
+            pytest.fail("Invalid credentials must not open a database connection")
     assert called is False
 
 
@@ -138,7 +151,8 @@ def test_connector_rejects_private_key_with_group_or_world_permissions(
     )
 
     with pytest.raises(HumanSessionRejected, match="permissions"):
-        connector.connect(principal())
+        with connector.connect(principal()):
+            pytest.fail("Insecure private key must not open a database connection")
 
 
 def test_connector_fails_closed_when_certificate_file_is_missing(tmp_path: Path) -> None:
@@ -150,7 +164,8 @@ def test_connector_fails_closed_when_certificate_file_is_missing(tmp_path: Path)
     )
 
     with pytest.raises(HumanSessionRejected, match="unavailable"):
-        connector.connect(principal())
+        with connector.connect(principal()):
+            pytest.fail("Missing certificate must not open a database connection")
 
 
 def test_connector_fails_closed_when_credential_provider_is_unavailable(
@@ -168,4 +183,5 @@ def test_connector_fails_closed_when_credential_provider_is_unavailable(
     )
 
     with pytest.raises(HumanSessionRejected, match="unavailable"):
-        connector.connect(principal())
+        with connector.connect(principal()):
+            pytest.fail("Unavailable provider must not open a database connection")

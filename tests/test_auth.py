@@ -74,6 +74,7 @@ def test_oidc_verifier_pins_algorithm_issuer_audience_and_required_claims(
     assert principal.tenant_id == TENANT_ID
     assert principal.business_unit_id == BUSINESS_UNIT_ID
     assert principal.roles == frozenset({"revenue_analyst"})
+    assert principal.issuer == "https://identity.example.com/"
     assert captured["algorithms"] == ["RS256"]
     assert captured["issuer"] == "https://identity.example.com/"
     assert captured["audience"] == "powerops-api"

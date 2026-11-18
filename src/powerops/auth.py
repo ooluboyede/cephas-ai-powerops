@@ -24,6 +24,7 @@ class AuthenticatedPrincipal:
     tenant_id: UUID
     business_unit_id: UUID
     roles: frozenset[str]
+    issuer: str = ""
 
 
 class PrincipalVerifier(Protocol):
@@ -83,6 +84,7 @@ class OidcJwtVerifier:
             tenant_id=UUID(tenant_claim),
             business_unit_id=UUID(business_unit_claim),
             roles=frozenset(roles_claim),
+            issuer=self.issuer,
         )
 
 

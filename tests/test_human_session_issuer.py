@@ -12,7 +12,7 @@ from powerops.identity_broker import (
     BrokerDependencyUnavailable,
     IssuedDatabaseSession,
 )
-from powerops.human_session_issuer import HumanSessionIssuer
+from powerops.human_session_issuer import (\n    HumanSessionIssuer,\n    StoredHumanSessionCredential,\n)
 
 ISSUER = "https://identity.customer.example"
 SUBJECT = "finance.user.17"
@@ -173,3 +173,55 @@ def test_session_issuer_rejects_non_finance_api_principal() -> None:
     with pytest.raises(BrokerAuthorizationError):
         issuer.create_session(principal=unentitled, broker_token="fresh-step-up-token")
     assert broker.csr_pem == ""
+
+
+
+def test_stored_credential_contract_rejects_non_exclusive_finance_entitlements() -> None:
+    values = {
+        "session_id": uuid4(),
+        "issuer": ISSUER,
+        "subject": SUBJECT,
+        "tenant_id": TENANT,
+        "business_unit_id": BUSINESS_UNIT,
+        "finance_operator": True,
+        "finance_verifier": True,
+        "database_role": "pwr_finance_user_17",
+        "certificate_pem": "-----BEGIN CERTIFICATE-----\\nplaceholder",
+        "private_key_pem": "-----BEGIN PRIVATE KEY-----\\nplaceholder",
+        "expires_at": datetime.now(UTC) + timedelta(minutes=2),
+    }
+
+    with pytest.raises(ValueError, match="Exactly one finance entitlement"):
+        StoredHumanSessionCredential(**values)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("issuer", "http://identity.customer.example", "issuer and subject"),
+        ("database_role", "postgres", "database role"),
+        ("certificate_pem", "not-a-certificate", "certificate must be PEM"),
+        ("private_key_pem", "not-a-key", "private key must be unencrypted"),
+        ("expires_at", datetime.now(), "timezone-aware"),
+    ],
+)
+def test_stored_credential_contract_rejects_malformed_records(
+    field: str, value: object, message: str
+) -> None:
+    values: dict[str, object] = {
+        "session_id": uuid4(),
+        "issuer": ISSUER,
+        "subject": SUBJECT,
+        "tenant_id": TENANT,
+        "business_unit_id": BUSINESS_UNIT,
+        "finance_operator": False,
+        "finance_verifier": True,
+        "database_role": "pwr_finance_user_17",
+        "certificate_pem": "-----BEGIN CERTIFICATE-----\\nplaceholder",
+        "private_key_pem": "-----BEGIN PRIVATE KEY-----\\nplaceholder",
+        "expires_at": datetime.now(UTC) + timedelta(minutes=2),
+    }
+    values[field] = value
+
+    with pytest.raises(ValueError, match=message):
+        StoredHumanSessionCredential(**values)  # type: ignore[arg-type]

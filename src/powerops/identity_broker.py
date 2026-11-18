@@ -92,6 +92,7 @@ class DatabasePrincipal:
     business_unit_id: UUID
     database_role: str
     active: bool
+    finance_operator: bool
     finance_verifier: bool
 
 
@@ -107,6 +108,7 @@ class IssuedDatabaseSession:
     subject: str
     tenant_id: UUID
     business_unit_id: UUID
+    finance_operator: bool
     finance_verifier: bool
 
 
@@ -315,8 +317,12 @@ class DatabaseSessionBroker:
         current = supplied_now.astimezone(UTC)
 
         principal = self._token_verifier.verify(token, now=current)
-        if "finance_verifier" not in principal.roles:
-            raise BrokerAuthorizationError("Finance-verifier entitlement is required")
+        finance_operator = "finance_operator" in principal.roles
+        finance_verifier = "finance_verifier" in principal.roles
+        if finance_operator == finance_verifier:
+            raise BrokerAuthorizationError(
+                "Exactly one finance maker or verifier entitlement is required"
+            )
 
         try:
             database_principal = self._directory.resolve(
@@ -336,7 +342,8 @@ class DatabaseSessionBroker:
             or database_principal.subject != principal.subject
             or database_principal.tenant_id != principal.tenant_id
             or database_principal.business_unit_id != principal.business_unit_id
-            or not database_principal.finance_verifier
+            or database_principal.finance_operator != finance_operator
+            or database_principal.finance_verifier != finance_verifier
         ):
             raise BrokerAuthorizationError(
                 "Customer database identity scope or entitlement mismatch"
@@ -423,5 +430,6 @@ class DatabaseSessionBroker:
             subject=principal.subject,
             tenant_id=principal.tenant_id,
             business_unit_id=principal.business_unit_id,
+            finance_operator=database_principal.finance_operator,
             finance_verifier=database_principal.finance_verifier,
         )

@@ -8,7 +8,8 @@ and certificate paths produced by the customer-operated identity broker.
 from __future__ import annotations
 
 import stat
-from contextlib import AbstractContextManager
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -23,6 +24,7 @@ from powerops.human_sessions import HumanSessionPrincipal, HumanSessionRejected
 class HumanPostgresCredentials:
     """Short-lived, customer-issued certificate material for one human identity."""
 
+    session_id: UUID
     issuer: str
     subject: str
     tenant_id: UUID
@@ -42,10 +44,10 @@ class HumanPostgresCredentials:
 class HumanPostgresCredentialProvider(Protocol):
     """Retrieve credentials minted for this exact verified human principal."""
 
-    def get_credentials(
+    def materialize_credentials(
         self, principal: HumanSessionPrincipal
-    ) -> HumanPostgresCredentials:
-        """Return certificate paths and the directory-assigned database role."""
+    ) -> AbstractContextManager[HumanPostgresCredentials]:
+        """Materialize exact-session credentials only for the connection lifetime."""
 
 
 class PsycopgConnectFactory(Protocol):
@@ -94,18 +96,29 @@ class PsycopgHumanSessionConnector:
             raise HumanSessionRejected("Customer private key permissions are too broad")
         return str(path)
 
-    def connect(self, principal: HumanSessionPrincipal) -> AbstractContextManager[Any]:
-        """Open a non-pooled TLS connection; callers must close it via its context."""
+    @contextmanager
+    def connect(self, principal: HumanSessionPrincipal) -> Iterator[Any]:
+        """Open a non-pooled TLS connection and erase temporary key files on exit."""
         try:
-            credentials = self._credential_provider.get_credentials(principal)
+            materialized = self._credential_provider.materialize_credentials(principal)
+            with materialized as credentials:
+                yield from self._connect_with_credentials(principal, credentials)
+        except HumanSessionRejected:
+            raise
         except Exception as exc:
             raise HumanSessionRejected(
                 "Customer human-session credentials are unavailable"
             ) from exc
 
+    def _connect_with_credentials(
+        self,
+        principal: HumanSessionPrincipal,
+        credentials: HumanPostgresCredentials,
+    ) -> Iterator[Any]:
         now = datetime.now(UTC)
         if (
-            credentials.issuer != principal.issuer
+            credentials.session_id != principal.session_id
+            or credentials.issuer != principal.issuer
             or credentials.subject != principal.subject
             or credentials.tenant_id != principal.tenant_id
             or credentials.business_unit_id != principal.business_unit_id
@@ -148,4 +161,5 @@ class PsycopgHumanSessionConnector:
             application_name="cephas-powerops-human-session",
             autocommit=False,
         )
-        return cast(AbstractContextManager[Any], connection)
+        with cast(AbstractContextManager[Any], connection) as managed_connection:
+            yield managed_connection

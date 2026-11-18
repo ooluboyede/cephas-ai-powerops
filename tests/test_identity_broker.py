@@ -166,6 +166,7 @@ def build_fixture() -> tuple[DatabaseSessionBroker, BrokerPrincipal, DisposableC
         business_unit_id=BUSINESS_UNIT,
         database_role="pwr_finance_user_001",
         active=True,
+        finance_operator=False,
         finance_verifier=True,
     )
     signer = DisposableCertificateIssuer()
@@ -212,12 +213,73 @@ def test_broker_issues_short_lived_certificate_for_directory_role() -> None:
     assert issued.subject == principal.subject
     assert issued.tenant_id == principal.tenant_id
     assert issued.business_unit_id == principal.business_unit_id
+    assert issued.finance_operator is False
     assert issued.finance_verifier is True
     assert len(common_name) == 1
     assert common_name[0].value == "pwr_finance_user_001"
     assert issued.expires_at <= now + timedelta(seconds=120)
     assert issued.expires_at <= principal.expires_at
 
+
+
+def test_broker_issues_separate_finance_operator_session() -> None:
+    broker, principal, _ = build_fixture()
+    operator_principal = BrokerPrincipal(
+        issuer=principal.issuer,
+        subject=principal.subject,
+        tenant_id=principal.tenant_id,
+        business_unit_id=principal.business_unit_id,
+        roles=frozenset({"finance_operator"}),
+        jti="finance-operator-jti-0144",
+        issued_at=principal.issued_at,
+        expires_at=principal.expires_at,
+        authentication_time=principal.authentication_time,
+        acr=principal.acr,
+        amr=principal.amr,
+    )
+    broker._token_verifier = StaticTokenVerifier(operator_principal)  # type: ignore[attr-defined]
+    broker._directory = StaticDirectory(
+        DatabasePrincipal(
+            issuer=ISSUER,
+            subject=SUBJECT,
+            tenant_id=TENANT,
+            business_unit_id=BUSINESS_UNIT,
+            database_role="pwr_finance_operator_001",
+            active=True,
+            finance_operator=True,
+            finance_verifier=False,
+        )
+    )  # type: ignore[attr-defined]
+
+    issued = broker.issue_session(
+        token="signed-customer-token",
+        csr_pem=make_csr(),
+    )
+
+    assert issued.database_role == "pwr_finance_operator_001"
+    assert issued.finance_operator is True
+    assert issued.finance_verifier is False
+
+
+def test_broker_rejects_dual_finance_role_claims() -> None:
+    broker, principal, _ = build_fixture()
+    dual_role_principal = BrokerPrincipal(
+        issuer=principal.issuer,
+        subject=principal.subject,
+        tenant_id=principal.tenant_id,
+        business_unit_id=principal.business_unit_id,
+        roles=frozenset({"finance_operator", "finance_verifier"}),
+        jti="finance-dual-jti-0144",
+        issued_at=principal.issued_at,
+        expires_at=principal.expires_at,
+        authentication_time=principal.authentication_time,
+        acr=principal.acr,
+        amr=principal.amr,
+    )
+    broker._token_verifier = StaticTokenVerifier(dual_role_principal)  # type: ignore[attr-defined]
+
+    with pytest.raises(BrokerAuthorizationError):
+        broker.issue_session(token="signed-customer-token", csr_pem=make_csr())
 
 def test_broker_rejects_replayed_token_identifier() -> None:
     broker, _, _ = build_fixture()

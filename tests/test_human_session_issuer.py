@@ -12,7 +12,10 @@ from powerops.identity_broker import (
     BrokerDependencyUnavailable,
     IssuedDatabaseSession,
 )
-from powerops.human_session_issuer import (\n    HumanSessionIssuer,\n    StoredHumanSessionCredential,\n)
+from powerops.human_session_issuer import (
+    HumanSessionIssuer,
+    StoredHumanSessionCredential,
+)
 
 ISSUER = "https://identity.customer.example"
 SUBJECT = "finance.user.17"

@@ -32,7 +32,9 @@ class PostgresHumanRevenueAssuranceRepository:
         self._human_session = human_session
 
     @staticmethod
-    def _database_principal(principal: AuthenticatedPrincipal) -> HumanSessionPrincipal:
+    def _database_principal(
+        principal: AuthenticatedPrincipal, session_id: UUID
+    ) -> HumanSessionPrincipal:
         finance_operator = "finance_operator" in principal.roles
         finance_verifier = "finance_verifier" in principal.roles
         if finance_operator == finance_verifier:
@@ -46,6 +48,7 @@ class PostgresHumanRevenueAssuranceRepository:
                 detail="Verified human issuer and subject are required",
             )
         return HumanSessionPrincipal(
+            session_id=session_id,
             issuer=principal.issuer,
             subject=principal.subject,
             tenant_id=principal.tenant_id,
@@ -96,6 +99,7 @@ class PostgresHumanRevenueAssuranceRepository:
     def record_recovery_outcome(
         self,
         principal: AuthenticatedPrincipal,
+        session_id: UUID,
         case_id: UUID,
         payload: RecoveryOutcomeCreate,
     ) -> RecoveryOutcomeRead | None:
@@ -104,7 +108,7 @@ class PostgresHumanRevenueAssuranceRepository:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only a distinct finance maker may record recovery outcomes",
             )
-        db_principal = self._database_principal(principal)
+        db_principal = self._database_principal(principal, session_id)
         outcome_id = uuid4()
         with self._human_session.connection(db_principal) as connection:
             case = connection.execute(
@@ -171,6 +175,7 @@ class PostgresHumanRevenueAssuranceRepository:
     def verify_recovery_outcome(
         self,
         principal: AuthenticatedPrincipal,
+        session_id: UUID,
         outcome_id: UUID,
         payload: RecoveryVerificationCreate,
     ) -> RecoveryVerificationRead | None:

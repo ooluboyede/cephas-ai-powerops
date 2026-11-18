@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 
 import jwt
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 from cryptography.x509.oid import NameOID
@@ -333,7 +333,9 @@ class DatabaseSessionBroker:
             or database_principal.business_unit_id != principal.business_unit_id
             or not database_principal.finance_verifier
         ):
-            raise BrokerAuthorizationError("Customer database identity scope or entitlement mismatch")
+            raise BrokerAuthorizationError(
+                "Customer database identity scope or entitlement mismatch"
+            )
         if not self._ROLE_PATTERN.fullmatch(database_principal.database_role):
             raise BrokerAuthorizationError("Customer directory returned an invalid database role")
 
@@ -372,7 +374,9 @@ class DatabaseSessionBroker:
             ) from exc
 
         if not isinstance(certificate_pem, str) or "BEGIN CERTIFICATE" not in certificate_pem:
-            raise BrokerDependencyUnavailable("Customer certificate issuer returned invalid material")
+            raise BrokerDependencyUnavailable(
+                "Customer certificate issuer returned invalid material"
+            )
         try:
             certificate = x509.load_pem_x509_certificate(certificate_pem.encode("ascii"))
             issued_public_key = certificate.public_key().public_bytes(

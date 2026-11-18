@@ -220,7 +220,7 @@ def create_human_database_session(
     request: Request,
     principal: AuthenticatedPrincipal = Depends(get_current_principal),
 ) -> HumanDatabaseSessionRead:
-    """Exchange a verified step-up broker token and CSR for a role-bound certificate."""
+    """Exchange a verified step-up broker token for a server-side database session lease."""
     _require_any_role(principal, "finance_verifier")
     if not principal.issuer.startswith("https://"):
         raise HTTPException(

@@ -55,6 +55,8 @@ def credentials(tmp_path: Path, **overrides: object) -> HumanPostgresCredentials
         "subject": SUBJECT,
         "tenant_id": TENANT,
         "business_unit_id": BUSINESS_UNIT,
+        "finance_operator": False,
+        "finance_verifier": True,
         "database_role": "pwr_finance_user_17",
         "host": "postgres.customer.example",
         "port": 5432,

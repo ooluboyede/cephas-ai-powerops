@@ -99,8 +99,10 @@ BEGIN
 END
 $function$;
 
+GRANT CREATE ON SCHEMA revenue_assurance TO powerops_scope_resolver;
 ALTER FUNCTION revenue_assurance.bind_human_audit_actor()
     OWNER TO powerops_scope_resolver;
+REVOKE CREATE ON SCHEMA revenue_assurance FROM powerops_scope_resolver;
 
 REVOKE ALL ON FUNCTION revenue_assurance.bind_recovery_outcome_to_human_maker()
     FROM PUBLIC;

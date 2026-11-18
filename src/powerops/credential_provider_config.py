@@ -103,7 +103,7 @@ class HumanSessionProviderConfig(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def reject_reserved_provider_ids(self) -> "HumanSessionProviderConfig":
+    def reject_reserved_provider_ids(self) -> HumanSessionProviderConfig:
         if self.provider_id in {"environment", "local", "none"}:
             raise ValueError("development-only provider identifiers are not valid here")
         return self

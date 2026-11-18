@@ -112,4 +112,4 @@ if __name__ == "__main__":
         # Avoid printing exception details that may contain customer endpoints
         # or driver-provided connection metadata.
         print(f"GATE_0_5_14_7_TLS_ACCEPTANCE=FAIL ({type(exc).__name__})", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from None

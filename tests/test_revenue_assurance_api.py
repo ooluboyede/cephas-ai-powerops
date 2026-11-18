@@ -29,6 +29,7 @@ from powerops.revenue_assurance import (
 
 TENANT_A = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 ISSUER = "https://identity.customer.example"
+SESSION_ID = UUID("f0000000-0000-4000-8000-000000000006")
 BU_A1 = UUID("a1000000-0000-4000-8000-000000000001")
 FINDING_ID = UUID("d1000000-0000-4000-8000-000000000001")
 CASE_ID = UUID("f1000000-0000-4000-8000-000000000001")
@@ -152,6 +153,7 @@ class FakeHumanRepository:
     def record_recovery_outcome(
         self,
         principal: AuthenticatedPrincipal,
+        session_id: UUID,
         case_id: UUID,
         payload: RecoveryOutcomeCreate,
     ) -> RecoveryOutcomeRead | None:
@@ -162,6 +164,7 @@ class FakeHumanRepository:
     def verify_recovery_outcome(
         self,
         principal: AuthenticatedPrincipal,
+        session_id: UUID,
         outcome_id: UUID,
         payload: RecoveryVerificationCreate,
     ) -> RecoveryVerificationRead | None:
@@ -399,6 +402,7 @@ def test_approval_succeeds_with_approver_role(client: TestClient) -> None:
 def test_recovery_recording_and_verification_are_separate(client: TestClient) -> None:
     recorded = client.post(
         f"/api/v1/revenue/cases/{CASE_ID}/recovery-outcomes",
+        headers={"X-CEPHAS-DB-Session": str(SESSION_ID)},
         json={
             "amount": "1000.2500",
             "currency": "NGN",
@@ -418,6 +422,7 @@ def test_recovery_recording_and_verification_are_separate(client: TestClient) ->
     )
     verified = client.post(
         f"/api/v1/revenue/recovery-outcomes/{outcome_id}/verification",
+        headers={"X-CEPHAS-DB-Session": str(SESSION_ID)},
         json={
             "evidence_reference": "independent-bank-confirmation",
             "reason": "Independent settlement evidence reconciled.",

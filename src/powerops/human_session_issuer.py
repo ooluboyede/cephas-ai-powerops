@@ -45,7 +45,12 @@ class HumanSessionBroker(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class StoredHumanSessionCredential:
-    """Decrypted session material returned transiently by a customer vault."""
+    """Decrypted session material returned transiently by a customer vault.
+
+    Instances are short-lived application data, not a persistence format. A
+    concrete store must never expose this object outside the trusted server
+    process or serialize its private-key field into logs or API responses.
+    """
 
     session_id: UUID
     issuer: str
@@ -59,9 +64,60 @@ class StoredHumanSessionCredential:
     private_key_pem: str
     expires_at: datetime
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.session_id, UUID):
+            raise ValueError("Credential session_id must be a UUID")
+        if not self.issuer.startswith("https://") or not self.subject.strip():
+            raise ValueError("Credential issuer and subject must identify a verified actor")
+        if not isinstance(self.tenant_id, UUID) or not isinstance(self.business_unit_id, UUID):
+            raise ValueError("Credential tenant and business-unit identifiers must be UUIDs")
+        if self.finance_operator == self.finance_verifier:
+            raise ValueError("Exactly one finance entitlement must be stored")
+        if not re.fullmatch(r"pwr_[a-z0-9_]{1,40}", self.database_role):
+            raise ValueError("Credential database role is invalid")
+        if not self.certificate_pem.startswith("-----BEGIN CERTIFICATE-----"):
+            raise ValueError("Credential certificate must be PEM encoded")
+        if not self.private_key_pem.startswith("-----BEGIN PRIVATE KEY-----"):
+            raise ValueError("Credential private key must be unencrypted PKCS8 PEM")
+        if self.expires_at.tzinfo is None or self.expires_at.utcoffset() is None:
+            raise ValueError("Credential expiry must be timezone-aware")
+
+
+class HumanSessionCredentialConflict(RuntimeError):
+    """The session UUID is already bound to a different immutable credential."""
+
+
+class HumanSessionCredentialStoreUnavailable(RuntimeError):
+    """The customer credential store cannot safely complete the requested operation."""
+
 
 class HumanSessionCredentialStore(Protocol):
-    """Customer-controlled encrypted store for session certificates and keys."""
+    """Customer-controlled, encrypted store for short-lived human DB credentials.
+
+    Contract requirements for every implementation:
+
+    * store_session is an atomic CREATE operation keyed by the exact session UUID.
+      It must never silently replace an existing record.
+    * Repeating a write for the same UUID and identical complete record is
+      idempotent. Reusing that UUID for any different actor, scope, role,
+      entitlement, certificate, key or expiry raises
+      HumanSessionCredentialConflict.
+    * The record is stored as one indivisible unit. Partial writes must not be
+      observable through get_session.
+    * Private keys are encrypted at rest by customer-controlled key management;
+      access is least-privilege and audited. The application identity cannot
+      administer the vault, policies, mounts or CA.
+    * get_session performs an exact UUID lookup only. It must not list, search,
+      or fall back to another session, tenant, business unit or shared
+      credential. Expired and revoked records return None.
+    * Implementations enforce expiry at read time and apply a TTL no later than
+      the credential expiry. Revocation prevents subsequent retrieval.
+    * No method logs or returns private-key material through diagnostics,
+      exception text, telemetry, audit payloads or API responses.
+    * Store outages, authentication failures and malformed responses fail
+      closed; implementations raise HumanSessionCredentialStoreUnavailable
+      (or a safe adapter-specific exception) without including secret values.
+    """
 
     def store_session(
         self,
@@ -78,12 +134,12 @@ class HumanSessionCredentialStore(Protocol):
         private_key_pem: str,
         expires_at: datetime,
     ) -> None:
-        """Persist credentials securely; encrypt private keys at rest and enforce TTL."""
+        """Atomically create an immutable exact-session record. Identical retries are idempotent; conflicting UUID reuse raises HumanSessionCredentialConflict and never overwrites the original record."""
 
     def get_session(
         self, session_id: UUID
     ) -> StoredHumanSessionCredential | None:
-        """Return one unexpired session after customer-vault access checks."""
+        """Return only the exact active session, or None if absent, expired or revoked; never search or fall back to another session."""
 
 
 class HumanSessionIssuer:

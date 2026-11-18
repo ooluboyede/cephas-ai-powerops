@@ -16,6 +16,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from powerops.auth import AuthenticatedPrincipal, get_current_principal
+from powerops.identity_broker import (
+    BrokerAuthenticationError,
+    BrokerAuthorizationError,
+    BrokerDependencyUnavailable,
+    BrokerReplayError,
+    IssuedDatabaseSession,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +128,29 @@ class RecoveryOutcomeRead(BaseModel):
     recorded_at: datetime
 
 
+class HumanDatabaseSessionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    broker_token: str = Field(min_length=1, max_length=16_384)
+    csr_pem: str = Field(min_length=1, max_length=16_384)
+
+
+class HumanDatabaseSessionRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    certificate_pem: str
+    expires_at: datetime
+    database_role: str
+    session_id: UUID
+
+
+class HumanDatabaseSessionBroker(Protocol):
+    """Injected customer-operated broker; never constructed from request data."""
+
+    def issue_session(self, *, token: str, csr_pem: str) -> IssuedDatabaseSession:
+        """Validate the broker token and issue a customer-signed short-lived certificate."""
+
+
 class RevenueAssuranceRepository(Protocol):
     """Persistence port; implementations must use the scope-bound DB identity."""
 
@@ -178,6 +208,77 @@ def _require_any_role(principal: AuthenticatedPrincipal, *roles: str) -> None:
 
 
 router = APIRouter(prefix="/api/v1/revenue", tags=["revenue-assurance"])
+
+
+@router.post(
+    "/database-sessions",
+    response_model=HumanDatabaseSessionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_human_database_session(
+    payload: HumanDatabaseSessionCreate,
+    request: Request,
+    principal: AuthenticatedPrincipal = Depends(get_current_principal),
+) -> HumanDatabaseSessionRead:
+    """Exchange a verified step-up broker token and CSR for a role-bound certificate."""
+    _require_any_role(principal, "finance_verifier")
+    if not principal.issuer.startswith("https://"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="A verified OIDC issuer is required for a human database session",
+        )
+
+    broker_value = getattr(request.app.state, "database_session_broker", None)
+    if broker_value is None or not callable(getattr(broker_value, "issue_session", None)):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Customer human database-session broker is not configured",
+        )
+    broker = cast(HumanDatabaseSessionBroker, broker_value)
+    try:
+        issued = broker.issue_session(
+            token=payload.broker_token,
+            csr_pem=payload.csr_pem,
+        )
+    except BrokerAuthenticationError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Customer broker assertion is invalid or insufficient",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+    except BrokerAuthorizationError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Customer directory did not authorize this database session",
+        ) from None
+    except BrokerReplayError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer broker assertion has already been consumed",
+        ) from None
+    except BrokerDependencyUnavailable:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Customer database-session dependency is unavailable",
+        ) from None
+
+    if (
+        issued.issuer != principal.issuer
+        or issued.subject != principal.subject
+        or issued.tenant_id != principal.tenant_id
+        or issued.business_unit_id != principal.business_unit_id
+        or issued.finance_verifier is not True
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Broker-issued database identity does not match the API principal",
+        )
+    return HumanDatabaseSessionRead(
+        certificate_pem=issued.certificate_pem,
+        expires_at=issued.expires_at,
+        database_role=issued.database_role,
+        session_id=issued.session_id,
+    )
 
 
 @router.get("/findings", response_model=FindingPage)

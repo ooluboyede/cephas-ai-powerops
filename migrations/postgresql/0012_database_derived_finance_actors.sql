@@ -48,8 +48,7 @@ BEGIN
       FROM revenue_assurance.recovery_outcomes AS outcome
      WHERE outcome.tenant_id = NEW.tenant_id
        AND outcome.business_unit_id = NEW.business_unit_id
-       AND outcome.outcome_id = NEW.outcome_id
-     FOR SHARE;
+       AND outcome.outcome_id = NEW.outcome_id;
 
     IF v_recorded_by = v_actor.actor_subject THEN
         RAISE EXCEPTION 'recovery outcome maker cannot verify the same outcome'

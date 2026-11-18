@@ -151,6 +151,24 @@ class HumanDatabaseSessionIssuerPort(Protocol):
         """Create a keypair, obtain a certificate, and store credentials securely."""
 
 
+class HumanRevenueAssuranceRepository(Protocol):
+    """Finance write port; implementations must require per-human DB sessions."""
+
+    def record_recovery_outcome(
+        self,
+        principal: AuthenticatedPrincipal,
+        case_id: UUID,
+        payload: RecoveryOutcomeCreate,
+    ) -> RecoveryOutcomeRead | None: ...
+
+    def verify_recovery_outcome(
+        self,
+        principal: AuthenticatedPrincipal,
+        outcome_id: UUID,
+        payload: RecoveryVerificationCreate,
+    ) -> RecoveryVerificationRead | None: ...
+
+
 class RevenueAssuranceRepository(Protocol):
     """Persistence port; implementations must use the scope-bound DB identity."""
 
@@ -191,6 +209,16 @@ def get_repository(request: Request) -> RevenueAssuranceRepository:
     return cast(RevenueAssuranceRepository, repository)
 
 
+def get_human_repository(request: Request) -> HumanRevenueAssuranceRepository:
+    repository = getattr(request.app.state, "human_revenue_assurance_repository", None)
+    if repository is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Per-human finance persistence is not configured",
+        )
+    return cast(HumanRevenueAssuranceRepository, repository)
+
+
 def _scope(principal: AuthenticatedPrincipal) -> ScopeContext:
     return ScopeContext(
         tenant_id=principal.tenant_id,
@@ -204,6 +232,16 @@ def _require_any_role(principal: AuthenticatedPrincipal, *roles: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The authenticated role is not permitted to perform this action",
+        )
+
+
+def _require_exclusive_finance_role(
+    principal: AuthenticatedPrincipal, required_role: str, other_role: str
+) -> None:
+    if required_role not in principal.roles or other_role in principal.roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Exactly one finance maker or verifier role is required",
         )
 
 
@@ -221,7 +259,10 @@ def create_human_database_session(
     principal: AuthenticatedPrincipal = Depends(get_current_principal),
 ) -> HumanDatabaseSessionRead:
     """Exchange a verified step-up broker token for a server-side database session lease."""
-    _require_any_role(principal, "finance_operator", "finance_verifier")
+    if "finance_operator" in principal.roles:
+        _require_exclusive_finance_role(principal, "finance_operator", "finance_verifier")
+    else:
+        _require_exclusive_finance_role(principal, "finance_verifier", "finance_operator")
     if not principal.issuer.startswith("https://"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -355,10 +396,10 @@ def record_recovery_outcome(
     case_id: UUID,
     payload: RecoveryOutcomeCreate,
     principal: AuthenticatedPrincipal = Depends(get_current_principal),
-    repository: RevenueAssuranceRepository = Depends(get_repository),
+    repository: HumanRevenueAssuranceRepository = Depends(get_human_repository),
 ) -> RecoveryOutcomeRead:
-    _require_any_role(principal, "finance_operator", "revenue_admin")
-    outcome = repository.record_recovery_outcome(_scope(principal), case_id, payload)
+    _require_exclusive_finance_role(principal, "finance_operator", "finance_verifier")
+    outcome = repository.record_recovery_outcome(principal, case_id, payload)
     if outcome is None:
         raise HTTPException(status_code=404, detail="Investigation case not found")
     return outcome
@@ -373,11 +414,11 @@ def verify_recovery_outcome(
     outcome_id: UUID,
     payload: RecoveryVerificationCreate,
     principal: AuthenticatedPrincipal = Depends(get_current_principal),
-    repository: RevenueAssuranceRepository = Depends(get_repository),
+    repository: HumanRevenueAssuranceRepository = Depends(get_human_repository),
 ) -> RecoveryVerificationRead:
-    _require_any_role(principal, "finance_verifier", "revenue_admin")
+    _require_exclusive_finance_role(principal, "finance_verifier", "finance_operator")
     verification = repository.verify_recovery_outcome(
-        _scope(principal), outcome_id, payload
+        principal, outcome_id, payload
     )
     if verification is None:
         raise HTTPException(status_code=404, detail="Recovery outcome not found")

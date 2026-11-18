@@ -21,8 +21,8 @@ from powerops.identity_broker import (
     BrokerAuthorizationError,
     BrokerDependencyUnavailable,
     BrokerReplayError,
-    IssuedDatabaseSession,
 )
+from powerops.human_session_issuer import HumanDatabaseSessionLease
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,23 +132,23 @@ class HumanDatabaseSessionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     broker_token: str = Field(min_length=1, max_length=16_384)
-    csr_pem: str = Field(min_length=1, max_length=16_384)
 
 
 class HumanDatabaseSessionRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    certificate_pem: str
     expires_at: datetime
     database_role: str
     session_id: UUID
 
 
-class HumanDatabaseSessionBroker(Protocol):
-    """Injected customer-operated broker; never constructed from request data."""
+class HumanDatabaseSessionIssuerPort(Protocol):
+    """Injected customer-controlled server-side session issuer."""
 
-    def issue_session(self, *, token: str, csr_pem: str) -> IssuedDatabaseSession:
-        """Validate the broker token and issue a customer-signed short-lived certificate."""
+    def create_session(
+        self, *, principal: AuthenticatedPrincipal, broker_token: str
+    ) -> HumanDatabaseSessionLease:
+        """Create a keypair, obtain a certificate, and store credentials securely."""
 
 
 class RevenueAssuranceRepository(Protocol):
@@ -228,17 +228,17 @@ def create_human_database_session(
             detail="A verified OIDC issuer is required for a human database session",
         )
 
-    broker_value = getattr(request.app.state, "database_session_broker", None)
-    if broker_value is None or not callable(getattr(broker_value, "issue_session", None)):
+    issuer_value = getattr(request.app.state, "human_session_issuer", None)
+    if issuer_value is None or not callable(getattr(issuer_value, "create_session", None)):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Customer human database-session broker is not configured",
+            detail="Customer human database-session issuer is not configured",
         )
-    broker = cast(HumanDatabaseSessionBroker, broker_value)
+    issuer = cast(HumanDatabaseSessionIssuerPort, issuer_value)
     try:
-        issued = broker.issue_session(
-            token=payload.broker_token,
-            csr_pem=payload.csr_pem,
+        lease = issuer.create_session(
+            principal=principal,
+            broker_token=payload.broker_token,
         )
     except BrokerAuthenticationError:
         raise HTTPException(
@@ -262,22 +262,10 @@ def create_human_database_session(
             detail="Customer database-session dependency is unavailable",
         ) from None
 
-    if (
-        issued.issuer != principal.issuer
-        or issued.subject != principal.subject
-        or issued.tenant_id != principal.tenant_id
-        or issued.business_unit_id != principal.business_unit_id
-        or issued.finance_verifier is not True
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Broker-issued database identity does not match the API principal",
-        )
     return HumanDatabaseSessionRead(
-        certificate_pem=issued.certificate_pem,
-        expires_at=issued.expires_at,
-        database_role=issued.database_role,
-        session_id=issued.session_id,
+        expires_at=lease.expires_at,
+        database_role=lease.database_role,
+        session_id=lease.session_id,
     )
 
 

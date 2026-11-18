@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from collections.abc import Iterator
 from typing import Any
 from uuid import UUID
 
 import pytest
 
+from powerops.human_session_issuer import StoredHumanSessionCredential
 from powerops.human_sessions import HumanSessionPrincipal, HumanSessionRejected
 from powerops.postgres_certificate_connector import (
     HumanPostgresCredentials,
     PsycopgHumanSessionConnector,
+    VaultBackedHumanPostgresCredentialProvider,
 )
 
 ISSUER = "https://identity.customer.example"
@@ -80,6 +82,101 @@ def credentials(tmp_path: Path, **overrides: object) -> HumanPostgresCredentials
     values.update(overrides)
     return HumanPostgresCredentials(**values)  # type: ignore[arg-type]
 
+
+
+class FakeCredentialStore:
+    def __init__(self, stored: StoredHumanSessionCredential) -> None:
+        self.stored = stored
+
+    def get_session(
+        self, session_id: UUID
+    ) -> StoredHumanSessionCredential | None:
+        return self.stored if session_id == self.stored.session_id else None
+
+
+def stored_credentials(**overrides: object) -> StoredHumanSessionCredential:
+    values: dict[str, object] = {
+        "session_id": UUID("f0000000-0000-4000-8000-000000000006"),
+        "issuer": ISSUER,
+        "subject": SUBJECT,
+        "tenant_id": TENANT,
+        "business_unit_id": BUSINESS_UNIT,
+        "finance_operator": False,
+        "finance_verifier": True,
+        "database_role": "pwr_finance_user_17",
+        "certificate_pem": "-----BEGIN CERTIFICATE-----\\nclient-cert\\n",
+        "private_key_pem": "-----BEGIN PRIVATE KEY-----\\nprivate-key\\n",
+        "expires_at": datetime.now(UTC) + timedelta(minutes=4),
+    }
+    values.update(overrides)
+    return StoredHumanSessionCredential(**values)  # type: ignore[arg-type]
+
+
+def test_vault_provider_materializes_exact_session_and_erases_key_files(
+    tmp_path: Path,
+) -> None:
+    secure_temp = tmp_path / "secure-tmp"
+    secure_temp.mkdir(mode=0o700)
+    secure_temp.chmod(0o700)
+    root = tmp_path / "customer-root.crt"
+    root.write_text("root certificate", encoding="utf-8")
+    provider = VaultBackedHumanPostgresCredentialProvider(
+        FakeCredentialStore(stored_credentials()),
+        host="postgres.customer.example",
+        port=5432,
+        database_name="powerops",
+        root_certificate_path=root,
+        secure_temp_directory=secure_temp,
+    )
+
+    with provider.materialize_credentials(principal()) as credentials_value:
+        temporary_directory = credentials_value.private_key_path.parent
+        assert credentials_value.session_id == principal().session_id
+        assert credentials_value.private_key_path.exists()
+        assert credentials_value.private_key_path.stat().st_mode & 0o777 == 0o600
+        assert temporary_directory.stat().st_mode & 0o777 == 0o700
+
+    assert not temporary_directory.exists()
+
+
+def test_vault_provider_rejects_credentials_for_another_human(
+    tmp_path: Path,
+) -> None:
+    secure_temp = tmp_path / "secure-tmp"
+    secure_temp.mkdir(mode=0o700)
+    secure_temp.chmod(0o700)
+    provider = VaultBackedHumanPostgresCredentialProvider(
+        FakeCredentialStore(stored_credentials(subject="different-user")),
+        host="postgres.customer.example",
+        port=5432,
+        database_name="powerops",
+        root_certificate_path=tmp_path / "root.crt",
+        secure_temp_directory=secure_temp,
+    )
+
+    with pytest.raises(HumanSessionRejected, match="do not match"):
+        with provider.materialize_credentials(principal()):
+            pytest.fail("Mismatched stored session must not materialize")
+
+
+def test_vault_provider_rejects_world_accessible_temporary_directory(
+    tmp_path: Path,
+) -> None:
+    secure_temp = tmp_path / "insecure-tmp"
+    secure_temp.mkdir(mode=0o755)
+    secure_temp.chmod(0o755)
+    provider = VaultBackedHumanPostgresCredentialProvider(
+        FakeCredentialStore(stored_credentials()),
+        host="postgres.customer.example",
+        port=5432,
+        database_name="powerops",
+        root_certificate_path=tmp_path / "root.crt",
+        secure_temp_directory=secure_temp,
+    )
+
+    with pytest.raises(HumanSessionRejected, match="permissions"):
+        with provider.materialize_credentials(principal()):
+            pytest.fail("Insecure temporary directory must be rejected")
 
 def test_connector_opens_fresh_verify_full_tls_connection(tmp_path: Path) -> None:
     captured: dict[str, Any] = {}
@@ -172,10 +269,12 @@ def test_connector_fails_closed_when_credential_provider_is_unavailable(
     tmp_path: Path,
 ) -> None:
     class UnavailableProvider:
-        def get_credentials(
+        @contextmanager
+        def materialize_credentials(
             self, principal_value: HumanSessionPrincipal
-        ) -> HumanPostgresCredentials:
+        ) -> Iterator[HumanPostgresCredentials]:
             raise RuntimeError("directory unavailable")
+            yield credentials(tmp_path)
 
     connector = PsycopgHumanSessionConnector(
         UnavailableProvider(),

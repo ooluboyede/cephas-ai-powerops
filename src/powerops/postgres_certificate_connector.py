@@ -150,8 +150,8 @@ class VaultBackedHumanPostgresCredentialProvider:
             raise HumanSessionRejected(
                 "Customer certificate common name does not match its database role"
             )
-        certificate_not_before = certificate.not_valid_before.replace(tzinfo=UTC)
-        certificate_not_after = certificate.not_valid_after.replace(tzinfo=UTC)
+        certificate_not_before = certificate.not_valid_before_utc
+        certificate_not_after = certificate.not_valid_after_utc
         if (
             certificate_not_before > now
             or certificate_not_after <= now

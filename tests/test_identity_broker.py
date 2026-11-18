@@ -9,7 +9,10 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
-import jwt\n\nimport powerops.identity_broker as identity_broker\nfrom powerops.identity_broker import (
+import jwt
+
+import powerops.identity_broker as identity_broker
+from powerops.identity_broker import (
     BrokerAuthenticationError,
     BrokerAuthorizationError,
     BrokerPolicy,

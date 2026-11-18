@@ -135,10 +135,12 @@ BEGIN
       FROM powerops_security.cluster_identity AS ci WHERE ci.singleton;
     SELECT binding.role_oid INTO STRICT v_role_oid
       FROM powerops_security.human_actor_binding AS binding
-      JOIN pg_catalog.pg_roles AS runtime_role
-        ON runtime_role.oid = binding.role_oid AND runtime_role.rolname = p_role_name
+      JOIN powerops_security.role_scope_binding AS scope_binding
+        ON scope_binding.cluster_id = binding.cluster_id
+       AND scope_binding.role_oid = binding.role_oid
+       AND scope_binding.role_name = p_role_name
      WHERE binding.cluster_id = v_cluster_id AND binding.active
-     FOR UPDATE;
+     FOR UPDATE OF binding;
 
     UPDATE powerops_security.human_actor_binding
        SET active = false, revoked_at = pg_catalog.clock_timestamp(),

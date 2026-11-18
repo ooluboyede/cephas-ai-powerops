@@ -99,6 +99,7 @@ def test_connector_opens_fresh_verify_full_tls_connection(tmp_path: Path) -> Non
         {"subject": "different-user"},
         {"tenant_id": UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")},
         {"business_unit_id": UUID("b1000000-0000-4000-8000-000000000001")},
+        {"finance_operator": True},
         {"database_role": "postgres"},
         {"database_role": "pwr_finance_user; SET ROLE postgres"},
         {"port": 0},

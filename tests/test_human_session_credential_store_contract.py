@@ -142,6 +142,12 @@ def test_session_uuid_cannot_be_rebound_to_changed_credential(
         changed[changed_field] = datetime.now(UTC) + timedelta(minutes=3)
     elif changed_field in {"tenant_id", "business_unit_id"}:
         changed[changed_field] = uuid4()
+    elif changed_field == "issuer":
+        changed[changed_field] = "https://different.identity.example"
+    elif changed_field == "certificate_pem":
+        changed[changed_field] = "-----BEGIN CERTIFICATE-----\\nchanged-certificate"
+    elif changed_field == "private_key_pem":
+        changed[changed_field] = "-----BEGIN PRIVATE KEY-----\\nchanged-private-key"
     else:
         changed[changed_field] = f"changed-{changed_field}"
 

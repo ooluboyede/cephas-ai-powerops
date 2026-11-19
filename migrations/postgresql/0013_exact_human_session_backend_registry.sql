@@ -12,7 +12,7 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'powerops_session_control') THEN
         CREATE ROLE powerops_session_control
-            NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
+            NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT
             NOREPLICATION NOBYPASSRLS;
     END IF;
 END
@@ -22,6 +22,9 @@ $roles$;
 -- The holder is a dedicated NOLOGIN function owner, never an application login.
 GRANT pg_signal_backend TO powerops_session_control;
 GRANT pg_read_all_stats TO powerops_session_control;
+GRANT SELECT ON powerops_security.cluster_identity TO powerops_session_control;
+GRANT SELECT ON powerops_security.role_scope_binding TO powerops_session_control;
+GRANT SELECT ON powerops_security.human_actor_binding TO powerops_session_control;
 
 CREATE TABLE powerops_security.human_database_session_binding (
     session_id uuid PRIMARY KEY,
@@ -105,10 +108,12 @@ BEGIN
       FROM powerops_security.cluster_identity AS ci
      WHERE ci.singleton;
 
-    SELECT role.oid, role.*
-      INTO STRICT v_role_oid, v_role
+    SELECT role.oid INTO STRICT v_role_oid
       FROM pg_catalog.pg_roles AS role
      WHERE role.rolname = p_role_name;
+    SELECT role.* INTO STRICT v_role
+      FROM pg_catalog.pg_roles AS role
+     WHERE role.oid = v_role_oid;
 
     IF NOT v_role.rolcanlogin OR v_role.rolsuper OR v_role.rolcreatedb
        OR v_role.rolcreaterole OR v_role.rolinherit
@@ -139,6 +144,11 @@ BEGIN
     ) VALUES (
         p_session_id, v_cluster_id, v_role_oid, v_actor.tenant_id,
         v_actor.business_unit_id, v_actor.issuer, v_actor.subject, p_expires_at
+    );
+
+    EXECUTE pg_catalog.format(
+        'GRANT EXECUTE ON FUNCTION powerops_security.register_human_database_session_backend(uuid) TO %I',
+        p_role_name
     );
 EXCEPTION
     WHEN unique_violation THEN

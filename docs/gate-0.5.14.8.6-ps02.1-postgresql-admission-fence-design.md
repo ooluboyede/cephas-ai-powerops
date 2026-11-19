@@ -1,107 +1,73 @@
 # PS-02.1 — PostgreSQL admission fence and exact backend registry
 
-Status: implementation design; no PostgreSQL adapter, migration, or runtime behavior is added by this document.
+Status: design only. Migration 0013 is present in the branch but is not accepted as safe for runtime use. No PostgreSQL adapter or runtime revocation behavior is accepted by this document.
 
 ## 1. Source inspection findings
 
-The current human-session connector opens a fresh TLS connection using a broker-assigned database role, but it does not register the session UUID with PostgreSQL. Its `application_name` is a constant and therefore cannot identify an exact human session.
+The current human-session connector opens a fresh TLS connection using a broker-assigned database role, but it does not register the session UUID with PostgreSQL. Its `application_name` is a constant and cannot identify an exact human session.
 
-The current database identity model in migrations 0010–0012 binds a database role to a human actor and business-unit scope. It does not bind a unique session UUID to a backend. The human actor uniqueness constraint is actor/scope based, so assuming that each actor already has a unique database role per session would be incorrect.
+Migrations 0010–0012 bind a database role to a human actor and business-unit scope. They do not bind a unique session UUID to a unique PostgreSQL login role. In particular, migration 0010 has both a primary key on (cluster_id, role_oid) and a unique constraint on (cluster_id, issuer, subject, tenant_id, business_unit_id). The broker's `DatabaseSessionBroker.issue_session` obtains the database role from the existing identity directory and then generates a new UUID; it does not provision a new role for that UUID. Consequently, two concurrent application sessions for the same actor can share one PostgreSQL `session_user`.
 
-The Python `SessionBackendRevocationControl` remains a protocol. There is no concrete PostgreSQL control adapter. The mock tests do not demonstrate backend termination or connect/revoke race safety.
+### 1.1 Blocking identity-model mismatch — PS-02.1A
 
-## 2. Required database model
+Migration 0013 resolves the PostgreSQL `session_user` to a role OID and uses that role OID to select a session binding. If multiple session UUIDs share the same login role, the database cannot determine which UUID belongs to the current backend. A client-supplied UUID does not prove the mapping. The current function's role-OID comparison therefore does not establish one-to-one session identity.
 
-Implement this only as an additive migration after the current human-actor migrations. Keep the session registry in the protected `powerops_security` schema.
+This is a correctness and security blocker: a backend could be registered against an incorrect session UUID, and revocation could terminate the wrong session's backend set. Do not integrate migration 0013 with the connector, grant its revocation function, or claim exact-session termination until PS-02.1A is resolved.
 
-### 2.1 Exact session binding
+## 2. Required identity-model change
 
-A protected `human_database_session_binding` row must bind:
-- one unpredictable session UUID;
-- the cluster identity;
-- the database role OID resolved from PostgreSQL catalogs (not a caller-supplied OID);
-- the corresponding active human actor binding;
-- the certificate/session expiry;
-- active/revoked state and immutable revocation metadata.
+The database must establish a one-to-one relationship between each issued session UUID and a dedicated, non-reused PostgreSQL LOGIN role (or another cryptographically authenticated per-session database identity that PostgreSQL itself exposes to the registration function).
 
-The primary key is the exact session UUID. Enforce one active binding per session and reject reuse of a UUID for a different role, actor, tenant, BU, or expiry. The provisioning function must be executable only by the trusted database provisioner/control plane. The API runtime and human database roles must not insert, update, or delete these rows.
+For the dedicated-role design, all of the following are mandatory:
 
-A provisioning adapter must create this binding before the lease is returned to the API caller. Until that broker-to-database provisioning handshake exists, the session UUID cannot be considered database-authenticated.
+- A single human actor may have multiple concurrent session roles; the existing actor/scope uniqueness constraint must not be weakened in a way that permits ambiguous actor resolution.
+- Each session role has exactly one immutable session UUID binding and cannot be reassigned to another session or actor.
+- Role creation, certificate issuance, session-binding creation, expiry, and cleanup are coordinated by a trusted customer control plane. The API runtime cannot create roles or choose role names.
+- The certificate common name and PostgreSQL authenticated login role must identify that exact session role; the broker must verify this binding before returning the lease.
+- The session UUID binding must also point to the existing human actor/scope identity and inherit its tenant, BU, and finance entitlements from database-owned records.
+- Revocation first fences the exact session binding, terminates only backends registered under that unique login identity, verifies none remain, and then retires the login role with NOLOGIN. Role names/OIDs must never be reused for another session.
+- Role creation, grant/revoke privileges, role membership, certificate mapping, cleanup, failure recovery, and concurrent issuance/revocation require explicit least-privilege design and customer DBA approval.
 
-### 2.2 Backend registry
+An alternative to one-role-per-session is acceptable only if it provides an equally strong database-authenticated, non-spoofable per-connection session identity. Caller-provided UUIDs, GUCs, application_name, SQL comments, request headers, or API-supplied PIDs are not such an identity.
 
-A protected `human_database_session_backend` table records:
-- exact session UUID;
-- backend PID;
-- backend start timestamp;
-- registration timestamp.
+## 3. Required session binding and backend registry
 
-Use (session UUID, PID, backend start timestamp) as the identity key. PID alone is reusable and is not a safe durable identifier. The table is not writable by application SQL or human roles.
+Only after PS-02.1A has a reviewed identity model should an additive migration implement the protected registry in `powerops_security`.
 
-### 2.3 Admission registration function
+A session binding must include the unpredictable session UUID, cluster, unique authenticated session role identity, existing actor/scope binding, expiry, and active/revoked state. The backend registry must record exact session UUID, PID, backend start timestamp, and registration timestamp. PID and backend start must both match to avoid PID reuse.
 
-A narrowly scoped SECURITY DEFINER function must:
-1. derive the actual login identity from `session_user` and resolve its role OID from `pg_roles`;
-2. lock the exact active session-binding row using a lock mode that conflicts with the revoker's state-changing UPDATE;
-3. verify the binding role OID equals the actual login role OID;
-4. verify the session and certificate expiry;
-5. obtain PID and backend start time from PostgreSQL itself;
-6. insert the backend registry row;
-7. return only a non-secret success marker.
+Provisioning must create the role and immutable binding through a trusted customer control plane before the lease is returned. Runtime and human roles must not write registry tables directly.
 
-The function must not accept a PID, role name, tenant ID, BU ID, or actor subject from the caller. It must use a fixed safe search_path, have PUBLIC execution revoked, and be executable only by the human session roles that are provisioned for this feature.
+## 4. Admission and revocation protocol
 
-The connector must call this function immediately after TLS connection establishment and before yielding the connection to application code. It must commit the registration transaction before yielding. Any registration error closes the connection and fails closed. A caller-supplied `application_name` is telemetry only, never security authority.
+The connector must register immediately after TLS connection establishment and before yielding the connection. Registration derives the authenticated database identity, PID, and backend start from PostgreSQL itself, locks the exact active binding, verifies the database-authenticated identity is uniquely bound to the session UUID, inserts the backend registry row, and commits before yielding. Any failure closes the connection.
 
-## 3. Revocation and race protocol
-
-The trusted revocation function accepts one session UUID and executes in one bounded transaction:
-
-1. Lock and atomically mark that exact session binding inactive. This UPDATE must conflict with the admission function's row lock.
-2. Because both operations serialize on the same binding row, an admission that wins the lock first commits its registry row before revocation proceeds; an admission that arrives after revocation sees inactive state and is rejected.
-3. Resolve candidate backends by joining the exact session's registry rows to `pg_stat_activity` on both PID and backend start time.
-4. Call `pg_terminate_backend` only for those resolved exact backend identities. Never accept PIDs from the API, and never terminate by role, tenant, or BU alone.
-5. Re-check `pg_stat_activity` for the same exact identities. Return verified success only when none remain.
-6. Record immutable, secret-free audit metadata for the actor, exact session UUID, counts, and outcome.
-
-The controller's privilege to terminate backends must be explicit and least-privileged (for example, a dedicated NOLOGIN control role with only the required PostgreSQL signal privilege, subject to customer DBA approval). Do not grant superuser to the API runtime, human login, or general provisioner merely to make this work.
-
-Use bounded `lock_timeout` and `statement_timeout`. If the admission lock cannot be acquired, the registry is inconsistent, the termination privilege is insufficient, the database is unavailable, or a backend remains, return an incomplete/error outcome. Retrying must converge safely. Do not turn a timeout into success.
-
-## 4. Required connector changes
-
-- Replace the constant-only connection setup with an immediate call to the database registration function using the exact lease session UUID.
-- Ensure registration completes and commits before the connection is yielded.
-- Close the physical connection if registration fails.
-- Keep TLS verify-full, broker-supplied role, exact credential checks, short certificate TTL, and one-connection-per-human-operation behavior.
-- Do not treat `application_name`, client GUCs, SQL comments, request headers, or a caller-selected PID as trusted identity.
+Revocation accepts one session UUID, fences its exact binding using a lock that serializes with admission, joins registry rows to `pg_stat_activity` by PID and backend start, terminates only those exact backends, and verifies that none remain. Use bounded lock and statement timeouts. Partial failures remain incomplete and retryable. A dedicated NOLOGIN control role may hold only the privileges approved by the customer's DBA; do not grant superuser to runtime roles or the general provisioner.
 
 ## 5. Required integration tests
 
-Run against each supported PostgreSQL major version (14–17):
+After the identity model and migration are corrected, run against PostgreSQL 14–17:
 
-1. A registered session is visible under its exact UUID and backend start time.
-2. Revoking session A terminates A's backend and preserves session B, even where both sessions belong to the same human actor or business unit.
-3. A client cannot register a session UUID bound to another role.
-4. A client cannot register an unknown, expired, or revoked UUID.
-5. Concurrent registration/revocation: registration-first is visible and terminated; revocation-first makes registration fail; no usable unregistered connection escapes the connector.
-6. PID reuse/stale registry rows do not target a different backend because backend start time must also match.
-7. Insufficient signal privilege, lock timeout, statement timeout, database outage, and termination failure all fail closed.
-8. Partial failure followed by retry reaches verified completion without affecting unrelated sessions.
-9. The audit record contains no credentials, private keys, tokens, or caller-supplied backend identifiers.
+1. Two simultaneous sessions for the same actor receive distinct database-authenticated session identities.
+2. Each backend can register only under its own session UUID.
+3. Revoking session A terminates A and preserves session B for the same actor and BU.
+4. Unknown, expired, revoked, or mismatched session identities fail closed.
+5. Registration-first/revocation-first races serialize with no unregistered usable connection escaping.
+6. PID reuse and stale registry rows cannot target a different backend.
+7. Insufficient privilege, lock/statement timeout, database outage, and termination failure fail closed.
+8. Retry converges without affecting unrelated sessions.
+9. Audit events contain no credentials, private keys, tokens, or caller-supplied backend identifiers.
 
-The test harness must create two simultaneous exact sessions and use separate physical connections. Mock-only tests are insufficient.
+Mock-only tests are insufficient.
 
-## 6. Acceptance evidence
+## 6. Migration 0013 disposition
 
-PS-02.1 is not accepted until all of the following exist:
-- additive migration and privilege review;
-- trusted broker/provisioner integration that creates the exact session binding before lease issuance;
-- connector registration and concrete PostgreSQL revocation adapter;
-- PostgreSQL 14–17 race and isolation tests with retained CI logs;
-- Ruff, Mypy, focused pytest, and full pytest results on the exact head SHA;
-- independent security retest of the exact resulting commit.
+The current `migrations/postgresql/0013_exact_human_session_backend_registry.sql` is an implementation attempt, not an accepted security control. It looks up a pre-existing actor role and uses that role OID as the session discriminator, while the broker can issue multiple UUIDs against that same role. The migration must not be treated as production-safe, and its CI wiring must not be interpreted as proof of correctness. Correct or replace it only after the one-to-one identity model is designed and reviewed. Do not apply it to a customer database or grant execution on its revocation function.
 
-## 7. Explicit non-claims
+## 7. Acceptance evidence
 
-This document does not implement a PostgreSQL adapter, migration, database privilege grant, broker integration, backend registration, termination, or revocation SLA. It does not establish PS-02 acceptance, production certification, deployment approval, or permission to merge PR #21.
+PS-02.1A/PS-02.1 remain unaccepted until there is a reviewed per-session database identity model, broker/provisioner integration, a corrected additive migration, connector registration and concrete revocation adapter, PostgreSQL 14–17 race/isolation tests with retained CI logs, static and full test results on the exact head SHA, and independent security retest.
+
+## 8. Explicit non-claims
+
+This document does not implement or validate per-session role provisioning, a PostgreSQL adapter, backend registration, termination, revocation SLA, production certification, deployment approval, or permission to merge PR #21.

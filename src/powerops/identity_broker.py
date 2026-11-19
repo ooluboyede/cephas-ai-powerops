@@ -185,10 +185,10 @@ class OidcBrokerTokenVerifier:
                     "verify_aud": True,
                 },
             )
-        except (PyJWKClientConnectionError, TimeoutError, OSError) as exc:
-            raise BrokerDependencyUnavailable("Customer JWKS is unavailable") from exc
-        except (PyJWTError, ValueError, TypeError) as exc:
-            raise BrokerAuthenticationError("Customer broker token is invalid") from exc
+        except (PyJWKClientConnectionError, TimeoutError, OSError):
+            raise BrokerDependencyUnavailable("Customer JWKS is unavailable") from None
+        except (PyJWTError, ValueError, TypeError):
+            raise BrokerAuthenticationError("Customer broker token is invalid") from None
 
         subject = claims.get("sub")
         jti = claims.get("jti")
@@ -221,10 +221,10 @@ class OidcBrokerTokenVerifier:
             issued = datetime.fromtimestamp(issued_at, UTC)
             expires = datetime.fromtimestamp(expires_at, UTC)
             authenticated = datetime.fromtimestamp(auth_time, UTC)
-        except (OverflowError, OSError, ValueError) as exc:
+        except (OverflowError, OSError, ValueError):
             raise BrokerAuthenticationError(
                 "Broker token time claim is outside the supported range"
-            ) from exc
+            ) from None
         if expires <= issued or (expires - issued).total_seconds() > 900:
             raise BrokerAuthenticationError("Broker token lifetime exceeds customer policy")
         if (current - issued).total_seconds() > self._policy.max_token_age_seconds:
@@ -243,8 +243,8 @@ class OidcBrokerTokenVerifier:
         try:
             tenant_id = UUID(tenant_claim)
             business_unit_id = UUID(business_unit_claim)
-        except ValueError as exc:
-            raise BrokerAuthenticationError("Tenant or business-unit claim is invalid") from exc
+        except ValueError:
+            raise BrokerAuthenticationError("Tenant or business-unit claim is invalid") from None
 
         return BrokerPrincipal(
             issuer=self._policy.issuer,
@@ -287,8 +287,8 @@ class DatabaseSessionBroker:
             raise BrokerAuthenticationError("CSR exceeds the permitted size")
         try:
             csr = x509.load_pem_x509_csr(csr_pem.encode("ascii"))
-        except (ValueError, UnicodeEncodeError) as exc:
-            raise BrokerAuthenticationError("CSR is not valid PEM") from exc
+        except (ValueError, UnicodeEncodeError):
+            raise BrokerAuthenticationError("CSR is not valid PEM") from None
         if not csr.is_signature_valid:
             raise BrokerAuthenticationError("CSR proof-of-possession signature is invalid")
 
@@ -331,10 +331,10 @@ class DatabaseSessionBroker:
                 principal.tenant_id,
                 principal.business_unit_id,
             )
-        except Exception as exc:
+        except Exception:
             raise BrokerDependencyUnavailable(
                 "Customer identity directory is unavailable"
-            ) from exc
+            ) from None
         if database_principal is None or not database_principal.active:
             raise BrokerAuthorizationError("No active customer database identity exists")
         if (
@@ -365,8 +365,8 @@ class DatabaseSessionBroker:
             consumed = self._replay_guard.consume(
                 principal.jti, fingerprint, certificate_expiry
             )
-        except Exception as exc:
-            raise BrokerDependencyUnavailable("Customer replay guard is unavailable") from exc
+        except Exception:
+            raise BrokerDependencyUnavailable("Customer replay guard is unavailable") from None
         if not consumed:
             raise BrokerReplayError("Broker token identifier has already been consumed")
 
@@ -380,10 +380,10 @@ class DatabaseSessionBroker:
                 public_key=public_key,
                 expires_at=certificate_expiry,
             )
-        except Exception as exc:
+        except Exception:
             raise BrokerDependencyUnavailable(
                 "Customer certificate issuer failed; request a fresh broker token"
-            ) from exc
+            ) from None
 
         if not isinstance(certificate_pem, str) or "BEGIN CERTIFICATE" not in certificate_pem:
             raise BrokerDependencyUnavailable(
@@ -416,10 +416,10 @@ class DatabaseSessionBroker:
                 or certificate.not_valid_after_utc <= current
             ):
                 raise ValueError("Issued certificate does not match the approved session")
-        except Exception as exc:
+        except Exception:
             raise BrokerDependencyUnavailable(
                 "Customer certificate issuer returned an unbound or invalid certificate"
-            ) from exc
+            ) from None
 
         return IssuedDatabaseSession(
             certificate_pem=certificate_pem,

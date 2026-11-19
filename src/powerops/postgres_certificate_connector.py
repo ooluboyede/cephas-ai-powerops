@@ -93,10 +93,10 @@ class VaultBackedHumanPostgresCredentialProvider:
     ) -> Iterator[HumanPostgresCredentials]:
         try:
             stored = self._credential_store.get_session(principal.session_id)
-        except Exception as exc:
+        except Exception:
             raise HumanSessionRejected(
                 "Customer human-session vault lookup failed"
-            ) from exc
+            ) from None
         if stored is None:
             raise HumanSessionRejected("Customer human-session lease is missing or expired")
 
@@ -137,10 +137,10 @@ class VaultBackedHumanPostgresCredentialProvider:
                 serialization.Encoding.DER,
                 serialization.PublicFormat.SubjectPublicKeyInfo,
             )
-        except (ValueError, TypeError) as exc:
+        except (ValueError, TypeError):
             raise HumanSessionRejected(
                 "Customer vault returned invalid certificate or private-key material"
-            ) from exc
+            ) from None
         if not hmac.compare_digest(certificate_public_key, private_public_key):
             raise HumanSessionRejected(
                 "Customer certificate and private key do not form a matching pair"
@@ -164,10 +164,10 @@ class VaultBackedHumanPostgresCredentialProvider:
         temp_root = self._secure_temp_directory
         try:
             metadata = temp_root.lstat()
-        except OSError as exc:
+        except OSError:
             raise HumanSessionRejected(
                 "Customer secure temporary directory is unavailable"
-            ) from exc
+            ) from None
         if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
             raise HumanSessionRejected("Customer secure temporary path must be a real directory")
         if metadata.st_uid != os.geteuid():
@@ -246,8 +246,8 @@ class PsycopgHumanSessionConnector:
     def _require_file(path: Path, *, private: bool = False) -> str:
         try:
             metadata = path.stat()
-        except OSError as exc:
-            raise HumanSessionRejected("Required customer certificate file is unavailable") from exc
+        except OSError:
+            raise HumanSessionRejected("Required customer certificate file is unavailable") from None
         if not stat.S_ISREG(metadata.st_mode):
             raise HumanSessionRejected("Customer certificate paths must reference regular files")
         if private and stat.S_IMODE(metadata.st_mode) & 0o077:
@@ -263,10 +263,10 @@ class PsycopgHumanSessionConnector:
                 yield from self._connect_with_credentials(principal, credentials)
         except HumanSessionRejected:
             raise
-        except Exception as exc:
+        except Exception:
             raise HumanSessionRejected(
                 "Customer human-session credentials are unavailable"
-            ) from exc
+            ) from None
 
     def _connect_with_credentials(
         self,

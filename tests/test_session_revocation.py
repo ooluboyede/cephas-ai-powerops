@@ -147,7 +147,6 @@ def test_store_outage_keeps_session_fenced_and_fails_closed():
         )
 
     assert session_id in backend.fenced
-    assert session_id in backend.fenced
     assert session_id not in backend.active
     assert ("terminate", session_id) in backend.events
     assert "MUST_NOT_LEAK" not in str(audit.events)
@@ -180,7 +179,7 @@ def test_nonzero_remaining_backend_prevents_success():
     backend = NonTerminatingBackend({session_id})
     audit = Audit()
 
-    with pytest.raises(SessionRevocationError, match="unverified"):
+    with pytest.raises(SessionRevocationError, match="incomplete"):
         coordinator(store, backend, audit).revoke(
             actor=principal(), session_id=session_id
         )

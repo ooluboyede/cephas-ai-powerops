@@ -201,6 +201,22 @@ def test_store_outage_fails_closed_without_secret_values_in_error() -> None:
     assert values["certificate_pem"] not in str(error.value)
 
 
+@pytest.mark.parametrize("operation", ["read", "revoke"])
+def test_store_outage_fails_closed_for_read_and_revoke(operation: str) -> None:
+    adapter = MockVaultCredentialStore()
+    values = credential()
+    store(adapter, values)
+    adapter.unavailable = True
+
+    with pytest.raises(HumanSessionCredentialStoreUnavailable) as error:
+        if operation == "read":
+            adapter.get_session(values["session_id"])  # type: ignore[arg-type]
+        else:
+            adapter.revoke_session(values["session_id"])  # type: ignore[arg-type]
+
+    assert values["private_key_pem"] not in str(error.value)
+    assert values["certificate_pem"] not in str(error.value)
+
 
 def test_reusable_adapter_conformance_assertions() -> None:
     from tests.support.credential_store_conformance import (

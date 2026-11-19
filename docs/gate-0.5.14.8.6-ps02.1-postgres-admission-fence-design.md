@@ -80,3 +80,28 @@ Run against real PostgreSQL 14, 15, 16 and 17 instances:
 PS-02.1 is not accepted until the customer-specific migration/functions, privilege audit, connector admission hook, concrete Python control adapter, and real PostgreSQL 14–17 concurrency/security tests exist and pass. Ruff, Mypy, full Python tests, and independent security retest are also required.
 
 This document is a design constraint, not an implemented database control, not evidence of termination, and not production certification. No customer database, CA, or privilege model has been selected or configured.
+
+
+## 8. Blocking prerequisite — session-role cardinality mismatch
+
+Repository inspection found a material mismatch between the proposed session binding and the current identity-provisioning model:
+
+- Migration `0010_human_actor_identity_foundation.sql` defines `human_actor_binding` with a unique constraint on `(cluster_id, issuer, subject, tenant_id, business_unit_id)`. This permits only one human-actor binding for that identity tuple.
+- `provision_human_actor_login()` provisions a role for the human actor tuple, not for an individual `session_id`.
+- `HumanSessionIssuer.create_session()` receives a broker-issued `session_id` and `database_role`, but the current contract does not establish that every new session receives a distinct, never-reused PostgreSQL login role.
+- The certificate connector authenticates using that role. PostgreSQL's `session_user` therefore identifies the login role, but cannot identify one of multiple application session UUIDs if a role is reused.
+
+Consequently, adding a registry that maps `session_user` to a UUID without first enforcing one-login-role-per-session would be unsafe: it could conflate separate application sessions and cause revocation to terminate the wrong session set. Do not implement the admission registry or `pg_terminate_backend` adapter on the assumption that role uniqueness already exists.
+
+### Required prerequisite PS-02.1A — session-scoped database login lifecycle
+
+Before the admission-fence migration:
+
+1. Define and enforce a one-to-one mapping between an unguessable application `session_id` and a dedicated PostgreSQL login-role OID. The mapping must be created by the customer provisioning authority, not by the API runtime.
+2. Refactor human actor provisioning so the same issuer/subject/tenant/BU identity can hold multiple concurrently active session-role bindings without weakening actor or tenant/BU authorization.
+3. Store the session UUID, role OID, immutable actor/scope tuple, expiry, and monotonic revocation state in a protected control schema. Prevent role-name/OID reuse and session UUID rebinding.
+4. Ensure the broker certificate CN and issued database role are bound to that exact session-role record. A certificate for one session must not authenticate as another session's role.
+5. Add migration and PostgreSQL 14–17 tests proving two sessions for the same human receive distinct login roles and independent revocation; a single role cannot be bound to two session UUIDs; expired/revoked role bindings fail closed; and the runtime cannot read or mutate the mapping.
+6. Update the identity broker contract and issuer tests to enforce this cardinality before proceeding to backend registration.
+
+**PS-02.1A is now a blocking implementation dependency.** The admission-fence and backend-registry SQL remains design-only until this prerequisite is implemented and tested. No concrete backend termination adapter should be built before the database can authenticate the exact session from trusted `session_user` state.

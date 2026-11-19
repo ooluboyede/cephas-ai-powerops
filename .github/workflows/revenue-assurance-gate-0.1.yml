@@ -111,6 +111,9 @@ jobs:
       - name: Run Gate 0.5.14.5 database-derived finance actors
         run: bash tests/postgresql/run_gate0_5_14_5.sh
 
+      - name: Apply PS-02.1 exact human-session backend registry migration
+        run: psql -X -v ON_ERROR_STOP=1 -f migrations/postgresql/0013_exact_human_session_backend_registry.sql
+
       - name: Run PostgreSQL repository integration tests
         env:
           POWEROPS_TEST_DATABASE_URL: postgresql://pwr_gate1e_bu_a1:Gate1E-Disposable-Only-ChangeMe@127.0.0.1:5432/postgres

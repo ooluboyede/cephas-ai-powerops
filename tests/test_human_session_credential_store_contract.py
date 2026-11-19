@@ -199,3 +199,12 @@ def test_store_outage_fails_closed_without_secret_values_in_error() -> None:
 
     assert values["private_key_pem"] not in str(error.value)
     assert values["certificate_pem"] not in str(error.value)
+
+
+
+def test_reusable_adapter_conformance_assertions() -> None:
+    from tests.support.credential_store_conformance import (
+        assert_human_session_store_conformance,
+    )
+
+    assert_human_session_store_conformance(MockVaultCredentialStore(), credential)

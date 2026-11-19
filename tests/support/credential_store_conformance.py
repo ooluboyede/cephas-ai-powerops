@@ -8,6 +8,7 @@ revocation behavior; these assertions cover only the application contract.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -58,7 +59,7 @@ def assert_human_session_store_conformance(
     assert adapter.get_session(second["session_id"]) is not None
 
     expired = credential_factory(
-        expires_at=credential_factory.expired_timestamp()
+        expires_at=datetime.now(UTC) - timedelta(seconds=1)
     )
     adapter.store_session(**expired)
     assert adapter.get_session(expired["session_id"]) is None

@@ -63,8 +63,11 @@ class SessionRevocationAudit(Protocol):
         session_id: UUID,
         outcome: str,
         terminated_backend_count: int,
+        credential_revoked: bool,
+        admission_fenced: bool,
+        backend_termination_verified: bool,
     ) -> None:
-        """Persist an immutable audit event without credential or token fields."""
+        """Persist immutable status without credential or token fields."""
 
 
 class HumanSessionRevocationCoordinator:
@@ -132,9 +135,12 @@ class HumanSessionRevocationCoordinator:
                     session_id=session_id,
                     outcome="verified",
                     terminated_backend_count=terminated,
+                    credential_revoked=store_revoked,
+                    admission_fenced=fenced,
+                    backend_termination_verified=verified,
                 )
             except Exception:
-                self._record_failure(actor, session_id, terminated)
+                self._record_failure(actor, session_id, terminated, store_revoked, fenced, verified)
                 raise SessionRevocationError(
                     "Revocation completed but its audit record could not be confirmed"
                 ) from None
@@ -150,7 +156,13 @@ class HumanSessionRevocationCoordinator:
         ) from None
 
     def _record_failure(
-        self, actor: AuthenticatedPrincipal, session_id: UUID, terminated: int
+        self,
+        actor: AuthenticatedPrincipal,
+        session_id: UUID,
+        terminated: int,
+        store_revoked: bool,
+        fenced: bool,
+        verified: bool,
     ) -> None:
         # Do not serialize provider exceptions, credentials, or backend details.
         try:
@@ -160,6 +172,9 @@ class HumanSessionRevocationCoordinator:
                 session_id=session_id,
                 outcome="incomplete",
                 terminated_backend_count=terminated,
+                credential_revoked=store_revoked,
+                admission_fenced=fenced,
+                backend_termination_verified=verified,
             )
         except Exception:
             # Audit unavailability must not turn a partial revocation into success.

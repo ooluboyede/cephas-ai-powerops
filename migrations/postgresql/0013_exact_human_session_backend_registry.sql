@@ -18,6 +18,21 @@ BEGIN
 END
 $roles$;
 
+DO $verify_control_role$
+DECLARE
+    v_role pg_catalog.pg_roles%ROWTYPE;
+BEGIN
+    SELECT role.* INTO STRICT v_role
+      FROM pg_catalog.pg_roles AS role
+     WHERE role.rolname = 'powerops_session_control';
+    IF v_role.rolcanlogin OR v_role.rolsuper OR v_role.rolcreatedb
+       OR v_role.rolcreaterole OR NOT v_role.rolinherit
+       OR v_role.rolreplication OR v_role.rolbypassrls THEN
+        RAISE EXCEPTION 'powerops_session_control must be a non-login, non-privileged INHERIT role';
+    END IF;
+END
+$verify_control_role$;
+
 -- PostgreSQL exposes these cluster-wide capabilities through predefined roles.
 -- The holder is a dedicated NOLOGIN function owner, never an application login.
 GRANT pg_signal_backend TO powerops_session_control;

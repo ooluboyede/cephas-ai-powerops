@@ -112,7 +112,15 @@ class HumanSessionRevocationCoordinator:
         if fenced:
             try:
                 terminated = self._backend_control.terminate_session_backends(session_id)
-                verified = self._backend_control.active_session_backend_count(session_id) == 0
+                remaining = self._backend_control.active_session_backend_count(session_id)
+                verified = (
+                    isinstance(terminated, int)
+                    and not isinstance(terminated, bool)
+                    and terminated >= 0
+                    and isinstance(remaining, int)
+                    and not isinstance(remaining, bool)
+                    and remaining == 0
+                )
             except Exception:
                 verified = False
 

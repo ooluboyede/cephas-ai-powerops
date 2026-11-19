@@ -140,7 +140,9 @@ class HumanSessionRevocationCoordinator:
                     backend_termination_verified=verified,
                 )
             except Exception:
-                self._record_failure(actor, session_id, terminated, store_revoked, fenced, verified)
+                self._record_failure(
+                    actor, session_id, terminated, store_revoked, fenced, verified
+                )
                 raise SessionRevocationError(
                     "Revocation completed but its audit record could not be confirmed"
                 ) from None
@@ -150,7 +152,9 @@ class HumanSessionRevocationCoordinator:
                 verified=True,
             )
 
-        self._record_failure(actor, session_id, terminated)
+        self._record_failure(
+            actor, session_id, terminated, store_revoked, fenced, verified
+        )
         raise SessionRevocationError(
             "Human database session revocation is incomplete; retry and verify"
         ) from None

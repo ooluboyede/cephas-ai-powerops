@@ -249,10 +249,10 @@ class HumanSessionIssuer:
                 private_key_pem=private_key_pem,
                 expires_at=expiry,
             )
-        except Exception as exc:
+        except Exception:
             raise BrokerDependencyUnavailable(
                 "Customer human-session credential store is unavailable"
-            ) from exc
+            ) from None
 
         return HumanDatabaseSessionLease(
             session_id=issued.session_id,

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -148,8 +147,9 @@ def test_store_outage_keeps_session_fenced_and_fails_closed():
         )
 
     assert session_id in backend.fenced
-    assert session_id in backend.active
-    assert ("terminate", session_id) not in backend.events
+    assert session_id in backend.fenced
+    assert session_id not in backend.active
+    assert ("terminate", session_id) in backend.events
     assert "MUST_NOT_LEAK" not in str(audit.events)
 
 

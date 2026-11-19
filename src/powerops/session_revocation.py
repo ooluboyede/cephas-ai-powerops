@@ -91,37 +91,55 @@ class HumanSessionRevocationCoordinator:
             raise SessionRevocationError("A valid exact session UUID is required")
 
         terminated = 0
+        store_revoked = False
+        fenced = False
+        verified = False
+
+        # Attempt both independent containment controls even if one fails.
+        # This minimizes the exposure window during a partial outage.
         try:
-            # Fence first: even if a later step fails, retries cannot admit a
-            # new connection while the session remains in a partial state.
-            self._backend_control.fence_session(session_id)
             self._credential_store.revoke_session(session_id)
-            terminated = self._backend_control.terminate_session_backends(session_id)
-            remaining = self._backend_control.active_session_backend_count(session_id)
-            if remaining != 0:
-                raise SessionRevocationError(
-                    "Exact-session PostgreSQL backend termination is unverified"
+            store_revoked = True
+        except Exception:
+            pass
+
+        try:
+            self._backend_control.fence_session(session_id)
+            fenced = True
+        except Exception:
+            pass
+
+        if fenced:
+            try:
+                terminated = self._backend_control.terminate_session_backends(session_id)
+                verified = self._backend_control.active_session_backend_count(session_id) == 0
+            except Exception:
+                verified = False
+
+        if store_revoked and fenced and verified:
+            try:
+                self._audit.record_event(
+                    event_type="human_database_session_revoked",
+                    actor_subject=actor.subject,
+                    session_id=session_id,
+                    outcome="verified",
+                    terminated_backend_count=terminated,
                 )
-            self._audit.record_event(
-                event_type="human_database_session_revoked",
-                actor_subject=actor.subject,
-                session_id=session_id,
-                outcome="verified",
-                terminated_backend_count=terminated,
-            )
+            except Exception:
+                self._record_failure(actor, session_id, terminated)
+                raise SessionRevocationError(
+                    "Revocation completed but its audit record could not be confirmed"
+                ) from None
             return SessionRevocationResult(
                 session_id=session_id,
                 terminated_backend_count=terminated,
                 verified=True,
             )
-        except SessionRevocationError:
-            self._record_failure(actor, session_id, terminated)
-            raise
-        except Exception:
-            self._record_failure(actor, session_id, terminated)
-            raise SessionRevocationError(
-                "Human database session revocation is incomplete; retry and verify"
-            ) from None
+
+        self._record_failure(actor, session_id, terminated)
+        raise SessionRevocationError(
+            "Human database session revocation is incomplete; retry and verify"
+        ) from None
 
     def _record_failure(
         self, actor: AuthenticatedPrincipal, session_id: UUID, terminated: int

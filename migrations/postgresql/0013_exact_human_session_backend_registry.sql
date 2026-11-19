@@ -22,6 +22,7 @@ $roles$;
 -- The holder is a dedicated NOLOGIN function owner, never an application login.
 GRANT pg_signal_backend TO powerops_session_control;
 GRANT pg_read_all_stats TO powerops_session_control;
+GRANT CREATE ON SCHEMA powerops_security TO powerops_session_control;
 GRANT SELECT ON powerops_security.cluster_identity TO powerops_session_control;
 GRANT SELECT ON powerops_security.role_scope_binding TO powerops_session_control;
 GRANT SELECT ON powerops_security.human_actor_binding TO powerops_session_control;
@@ -332,5 +333,7 @@ REVOKE ALL ON FUNCTION powerops_security.revoke_human_database_session(uuid)
     FROM PUBLIC;
 -- Do not grant revocation to provisioner, human logins, or application roles.
 -- A separate, customer-approved control-plane grant is intentionally required.
+
+REVOKE CREATE ON SCHEMA powerops_security FROM powerops_session_control;
 
 COMMIT;

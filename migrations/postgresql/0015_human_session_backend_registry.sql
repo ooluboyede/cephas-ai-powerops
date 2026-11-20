@@ -225,6 +225,34 @@ AFTER INSERT ON powerops_security.human_session_actor_binding
 FOR EACH ROW
 EXECUTE FUNCTION powerops_security.grant_session_backend_registration();
 
+-- Backfill registration EXECUTE for still-active session roles provisioned
+-- before this additive migration was installed.
+DO $backfill$
+DECLARE
+    v_binding record;
+    v_role_oid oid;
+BEGIN
+    FOR v_binding IN
+        SELECT binding.session_role_name, binding.session_role_oid
+          FROM powerops_security.human_session_actor_binding AS binding
+         WHERE binding.active
+           AND binding.expires_at > pg_catalog.clock_timestamp()
+    LOOP
+        SELECT role.oid INTO STRICT v_role_oid
+          FROM pg_catalog.pg_roles AS role
+         WHERE role.rolname = v_binding.session_role_name
+           AND role.rolcanlogin;
+        IF v_role_oid <> v_binding.session_role_oid THEN
+            RAISE EXCEPTION 'active session role OID/name mismatch during registration grant';
+        END IF;
+        EXECUTE pg_catalog.format(
+            'GRANT EXECUTE ON FUNCTION powerops_security.register_human_session_backend(uuid) TO %I',
+            v_binding.session_role_name
+        );
+    END LOOP;
+END
+$backfill$;
+
 -- Control-plane termination is deliberately separate from session retirement.
 -- The caller must first commit retire_human_session_login(session_id, reason),
 -- which fences admission on the same session binding row and sets NOLOGIN.

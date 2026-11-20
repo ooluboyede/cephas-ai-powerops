@@ -13,7 +13,9 @@ from powerops.session_revocation_composition import (
 )
 
 
-def principal_row(login, *, can_retire=False, can_terminate=False, can_count=False, can_audit=False):
+def principal_row(
+    login, *, can_retire=False, can_terminate=False, can_count=False, can_audit=False
+):
     return {
         "session_user": login,
         "current_user": login,
@@ -94,7 +96,10 @@ def test_composed_coordinator_verifies_actual_principals_before_revocation():
 
     def provisioner_factory():
         calls["provisioner"] += 1
-        row = principal_row("powerops_provisioner", can_retire=True) if calls["provisioner"] == 1 else (None,)
+        if calls["provisioner"] == 1:
+            row = principal_row("powerops_provisioner", can_retire=True)
+        else:
+            row = (None,)
         return FakeConnection(events, row)
 
     def termination_factory():

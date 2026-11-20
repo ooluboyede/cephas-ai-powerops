@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+from base64 import b64encode
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from powerops.auth import AuthenticatedPrincipal
+from powerops.credential_revocation_attestation import (
+    CredentialRevocationReceipt,
+    Ed25519CredentialRevocationReceiptVerifier,
+    canonical_receipt_payload,
+)
 from powerops.session_revocation import (
     HumanSessionRevocationCoordinator,
     SessionRevocationError,
@@ -13,6 +22,7 @@ from powerops.session_revocation import (
 
 class Store:
     def __init__(self):
+        self.signing_key = Ed25519PrivateKey.generate()
         self.revoked = set()
         self.fail = False
         self.scopes = {}
@@ -30,6 +40,23 @@ class Store:
         if self.fail:
             raise RuntimeError("synthetic provider secret MUST_NOT_LEAK")
         self.revoked.add(session_id)
+        unsigned = CredentialRevocationReceipt(
+            session_id=session_id,
+            issuer="https://vault.customer.example",
+            key_id="vault-key-2026-01",
+            revoked_at=datetime.now(UTC),
+            outcome="revoked",
+            signature_b64="AA==",
+        )
+        signature = self.signing_key.sign(canonical_receipt_payload(unsigned))
+        return CredentialRevocationReceipt(
+            session_id=unsigned.session_id,
+            issuer=unsigned.issuer,
+            key_id=unsigned.key_id,
+            revoked_at=unsigned.revoked_at,
+            outcome=unsigned.outcome,
+            signature_b64=b64encode(signature).decode("ascii"),
+        )
 
 
 class BackendControl:
@@ -80,8 +107,17 @@ def principal(*, authorized=True):
 
 
 def coordinator(store, backend, audit):
+    public_key = store.signing_key.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw
+    )
+    verifier = Ed25519CredentialRevocationReceiptVerifier(
+        trusted_keys={("https://vault.customer.example", "vault-key-2026-01"): public_key}
+    )
     return HumanSessionRevocationCoordinator(
-        credential_store=store, backend_control=backend, audit=audit
+        credential_store=store,
+        backend_control=backend,
+        audit=audit,
+        credential_receipt_verifier=verifier,
     )
 
 

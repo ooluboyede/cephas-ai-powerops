@@ -77,6 +77,7 @@ SET search_path = pg_catalog, powerops_security
 AS $function$
 DECLARE
     v_audit_id bigint;
+    v_remaining_backends integer;
 BEGIN
     IF p_event_type NOT IN (
         'human_database_session_revoked',
@@ -94,12 +95,21 @@ BEGIN
             USING ERRCODE = '22023';
     END IF;
 
-    IF p_outcome = 'verified' AND NOT (
-        p_credential_revoked AND p_admission_fenced
-        AND p_backend_termination_verified
-    ) THEN
-        RAISE EXCEPTION 'revocation audit outcome contradicts containment flags'
-            USING ERRCODE = '22023';
+    IF p_outcome = 'verified' THEN
+        -- The audit writer's assertion is not sufficient: independently prove
+        -- that this exact database session exists, is fenced, and has no live
+        -- registered backend. The SECURITY DEFINER verifier is owned by the
+        -- separately constrained session-control function owner.
+        v_remaining_backends :=
+            powerops_security.count_human_session_backends(p_session_id);
+        IF v_remaining_backends <> 0
+           OR NOT p_admission_fenced
+           OR NOT p_backend_termination_verified
+           OR NOT p_credential_revoked THEN
+            RAISE EXCEPTION
+                'verified audit event lacks independently confirmed containment'
+                USING ERRCODE = '22023';
+        END IF;
     END IF;
 
     INSERT INTO powerops_security.human_session_revocation_audit (

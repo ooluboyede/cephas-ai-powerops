@@ -10,7 +10,7 @@ import binascii
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Protocol
 from uuid import UUID
 
 from cryptography.exceptions import InvalidSignature

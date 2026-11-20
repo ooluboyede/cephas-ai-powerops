@@ -60,20 +60,24 @@ admin -c "SELECT powerops_security.retire_human_session_login('$SESSION_B','Gate
 
 echo "[Gate PS-02.1A.5] Terminate only exact PID + backend_start matches; retry until verified"
 complete=f
-total_terminated=0
 for attempt in $(seq 1 20); do
   result=$(admin -At -F '|' -c "SELECT terminated_backend_count, remaining_backend_count, complete FROM powerops_security.terminate_human_session_backends('$SESSION_B')")
   terminated="${result%%|*}"
-  total_terminated=$((total_terminated + terminated))
   remainder="${result#*|}"
   remaining="${remainder%%|*}"
   complete="${result##*|}"
   [[ "$complete" == "t" ]] && break
   sleep 0.25
 done
-[[ "$complete" == "t" && "$total_terminated" == "2" && "$remaining" == "0" ]] || {
-  echo "FAIL: exact backend termination did not verify two live backend terminations (signalled=$total_terminated remaining=$remaining last_result=$result)" >&2
+[[ "$complete" == "t" && "$remaining" == "0" ]] || {
+  echo "FAIL: exact backend termination did not reach verified completion (remaining=$remaining last_result=$result)" >&2
   kill "$backend_a" "$backend_b" 2>/dev/null || true
+  exit 1
+}
+terminated_registry_count=$(admin -Atc "SELECT count(*) FROM powerops_security.human_session_backend_registry WHERE session_id='$SESSION_B' AND terminated_at IS NOT NULL")
+termination_requested_count=$(admin -Atc "SELECT count(*) FROM powerops_security.human_session_backend_audit WHERE session_id='$SESSION_B' AND event_type='backend_termination_requested'")
+[[ "$terminated_registry_count" == "2" && "$termination_requested_count" == "2" ]] || {
+  echo "FAIL: expected two exact backend terminations (registry=$terminated_registry_count requested=$termination_requested_count)" >&2
   exit 1
 }
 wait "$backend_a" 2>/dev/null || true

@@ -368,5 +368,53 @@ REVOKE ALL ON FUNCTION powerops_security.terminate_human_session_backends(uuid)
 -- No grant to provisioner, session roles, or application roles. A customer DBA
 -- must grant EXECUTE to a separately authenticated revocation control plane.
 
+-- Narrow SECURITY DEFINER verifier for the separately authenticated
+-- revocation control plane. It exposes only a count for one exact UUID; the
+-- login identity receives no direct registry-table or pg_stat_activity access.
+CREATE OR REPLACE FUNCTION powerops_security.count_human_session_backends(
+    p_session_id uuid
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, powerops_security
+SET statement_timeout = '10s'
+AS $function$
+DECLARE
+    v_count integer;
+BEGIN
+    IF p_session_id IS NULL THEN
+        RAISE EXCEPTION 'exact human session identifier is required'
+            USING ERRCODE = '22023';
+    END IF;
+
+    PERFORM 1
+      FROM powerops_security.human_session_actor_binding AS binding
+     WHERE binding.session_id = p_session_id
+       AND NOT binding.active;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'session must exist and be fenced before backend verification'
+            USING ERRCODE = '55000';
+    END IF;
+
+    SELECT count(*)::integer INTO v_count
+      FROM powerops_security.human_session_backend_registry AS registry
+      JOIN pg_catalog.pg_stat_activity AS activity
+        ON activity.pid = registry.backend_pid
+       AND activity.backend_start = registry.backend_start
+     WHERE registry.session_id = p_session_id
+       AND registry.terminated_at IS NULL;
+
+    RETURN v_count;
+END
+$function$;
+
+ALTER FUNCTION powerops_security.count_human_session_backends(uuid)
+    OWNER TO powerops_session_control;
+REVOKE ALL ON FUNCTION powerops_security.count_human_session_backends(uuid)
+    FROM PUBLIC;
+-- Customer DBA grants EXECUTE on both termination and count functions only to
+-- the separately authenticated revocation-control login.
+
 REVOKE CREATE ON SCHEMA powerops_security FROM powerops_session_control;
 COMMIT;

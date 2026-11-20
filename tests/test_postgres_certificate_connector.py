@@ -59,10 +59,8 @@ class FakeResult:
 
 
 class FakeConnection:
-    def __init__(self, registration_row: object | None = None) -> None:
-        self.registration_row = (
-            {"registered": True} if registration_row is None else registration_row
-        )
+    def __init__(self, registration_row: object = {"registered": True}) -> None:
+        self.registration_row = registration_row
         self.events: list[str] = []
         self.closed = False
 

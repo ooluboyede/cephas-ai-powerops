@@ -92,7 +92,7 @@ jobs:
         run: .venv/bin/pytest
 
       - name: PostgreSQL revocation adapter and audit focused tests
-        run: .venv/bin/pytest -q tests/test_postgres_session_revocation.py tests/test_postgres_session_revocation_audit.py
+        run: .venv/bin/pytest -q tests/test_postgres_session_revocation.py tests/test_postgres_session_revocation_audit.py tests/test_session_revocation_composition.py
 
       - name: Install PostgreSQL client
         run: |

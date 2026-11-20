@@ -111,8 +111,7 @@ def test_backend_verification_is_exact_session_and_rejects_boolean_count():
 
     assert control.active_session_backend_count(session_id) == 0
     sql, params = termination.cursor_instance.executed
-    assert "registry.session_id = %s" in sql
-    assert "activity.backend_start = registry.backend_start" in sql
+    assert "count_human_session_backends(%s)" in sql
     assert params == (str(session_id),)
 
     bad = make_control(Connection((None,)), Connection((True,)))

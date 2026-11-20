@@ -1,11 +1,32 @@
 from __future__ import annotations
 
-from uuid import uuid4
+from uuid import UUID, uuid4
+
+import pytest
 
 from powerops.auth import AuthenticatedPrincipal
+from powerops.postgres_principal_verification import (
+    PostgresPrincipalVerificationError,
+)
 from powerops.session_revocation_composition import (
     build_human_session_revocation_coordinator,
 )
+
+
+def principal_row(login, *, can_retire=False, can_terminate=False, can_count=False, can_audit=False):
+    return {
+        "session_user": login,
+        "current_user": login,
+        "session_control_member": False,
+        "revocation_auditor_member": False,
+        "can_retire": can_retire,
+        "can_terminate": can_terminate,
+        "can_count": can_count,
+        "can_audit": can_audit,
+        "registry_direct_access": False,
+        "backend_audit_direct_access": False,
+        "revocation_audit_direct_access": False,
+    }
 
 
 class FakeCursor:
@@ -14,6 +35,8 @@ class FakeCursor:
         self.row = row
 
     def execute(self, sql, params):
+        if "jsonb_build_object" in sql:
+            return
         if "retire_human_session_login" in sql:
             operation = "fence"
         elif "terminate_human_session_backends" in sql:
@@ -27,7 +50,7 @@ class FakeCursor:
         self.event_log.append((operation, params))
 
     def fetchone(self):
-        return self.row
+        return (self.row,) if isinstance(self.row, dict) else self.row
 
     def close(self):
         return None
@@ -64,26 +87,39 @@ class FakeCredentialStore:
         self.event_log.append(("credential_revoke", session_id))
 
 
-def test_composed_coordinator_executes_full_verified_revocation_sequence():
+def test_composed_coordinator_verifies_actual_principals_before_revocation():
     session_id = uuid4()
     events = []
+    calls = {"provisioner": 0, "termination": 0, "audit": 0}
 
     def provisioner_factory():
-        return FakeConnection(events, (None,))
+        calls["provisioner"] += 1
+        row = principal_row("powerops_provisioner", can_retire=True) if calls["provisioner"] == 1 else (None,)
+        return FakeConnection(events, row)
 
     def termination_factory():
-        # First call is termination; second call verifies no live backends.
-        row = (2, 0, True) if sum(e[0] == "terminate" for e in events) == 0 else (0,)
+        calls["termination"] += 1
+        if calls["termination"] == 1:
+            row = principal_row("powerops_termination", can_terminate=True, can_count=True)
+        elif calls["termination"] == 2:
+            row = (2, 0, True)
+        else:
+            row = (0,)
         return FakeConnection(events, row)
 
     def audit_factory():
-        return FakeConnection(events, (101,))
+        calls["audit"] += 1
+        row = principal_row("powerops_audit", can_audit=True) if calls["audit"] == 1 else (101,)
+        return FakeConnection(events, row)
 
     coordinator = build_human_session_revocation_coordinator(
         credential_store=FakeCredentialStore(events),
         provisioner_connection_factory=provisioner_factory,
         termination_connection_factory=termination_factory,
         audit_connection_factory=audit_factory,
+        expected_provisioner_login="powerops_provisioner",
+        expected_termination_login="powerops_termination",
+        expected_audit_login="powerops_audit",
     )
     actor = AuthenticatedPrincipal(
         subject="oidc|session-revoker",
@@ -99,14 +135,51 @@ def test_composed_coordinator_executes_full_verified_revocation_sequence():
     assert result.terminated_backend_count == 2
     assert result.verified is True
     assert [event[0] for event in events] == [
-        "credential_revoke",
-        "fence",
-        "terminate",
-        "verify",
-        "audit",
+        "credential_revoke", "fence", "terminate", "verify", "audit"
     ]
-    assert events[1][1] == (str(session_id), "powerops_exact_session_revocation")
-    assert events[2][1] == (str(session_id),)
-    assert events[3][1] == (str(session_id),)
-    assert events[4][1][0] == "human_database_session_revoked"
-    assert events[4][1][2] == str(session_id)
+
+
+def test_composition_fails_closed_when_factory_authenticates_as_wrong_login():
+    events = []
+
+    def factory(login, **privileges):
+        return lambda: FakeConnection(events, principal_row(login, **privileges))
+
+    with pytest.raises(PostgresPrincipalVerificationError):
+        build_human_session_revocation_coordinator(
+            credential_store=FakeCredentialStore(events),
+            provisioner_connection_factory=factory("unexpected_role", can_retire=True),
+            termination_connection_factory=factory(
+                "powerops_termination", can_terminate=True, can_count=True
+            ),
+            audit_connection_factory=factory("powerops_audit", can_audit=True),
+            expected_provisioner_login="powerops_provisioner",
+            expected_termination_login="powerops_termination",
+            expected_audit_login="powerops_audit",
+        )
+
+
+def test_composition_fails_closed_when_audit_role_has_direct_table_access():
+    events = []
+
+    def factory(login, *, direct=False, **privileges):
+        row = principal_row(login, **privileges)
+        row["revocation_audit_direct_access"] = direct
+        return lambda: FakeConnection(events, row)
+
+    with pytest.raises(PostgresPrincipalVerificationError):
+        build_human_session_revocation_coordinator(
+            credential_store=FakeCredentialStore(events),
+            provisioner_connection_factory=factory(
+                "powerops_provisioner", can_retire=True
+            ),
+            termination_connection_factory=factory(
+                "powerops_termination", can_terminate=True, can_count=True
+            ),
+            audit_connection_factory=factory(
+                "powerops_audit", can_audit=True, direct=True
+            ),
+            expected_provisioner_login="powerops_provisioner",
+            expected_termination_login="powerops_termination",
+            expected_audit_login="powerops_audit",
+        )

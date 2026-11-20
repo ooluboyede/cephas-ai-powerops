@@ -111,7 +111,8 @@ BEGIN
       OR p_backend_termination_verified IS NULL
       OR ((p_credential_receipt_payload IS NULL)
           <> (p_credential_receipt_signature IS NULL))
-      OR (p_credential_receipt_payload IS NOT NULL
+      OR (p_outcome = 'verified'
+          AND p_credential_receipt_payload IS NOT NULL
           AND p_credential_receipt_payload ->> 'session_id'
               IS DISTINCT FROM p_session_id::text) THEN
         RAISE EXCEPTION 'invalid session revocation audit event'

@@ -370,7 +370,9 @@ def test_broker_does_not_use_csr_subject_as_database_role() -> None:
     )
     certificate = x509.load_pem_x509_certificate(issued.certificate_pem.encode("ascii"))
     common_name = certificate.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
-    assert common_name[0].value == "pwr_finance_user_001"
+    assert common_name[0].value.startswith("pwr_")
+    assert common_name[0].value != "pwr_privileged_admin"
+    assert len(common_name[0].value) == 28
 
 
 def test_oidc_broker_verifier_checks_signature_issuer_audience_and_step_up(

@@ -122,6 +122,9 @@ jobs:
           POWEROPS_TEST_ADMIN_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
         run: bash tests/postgresql/run_gate0_5_14_8_6_ps021a7.sh
 
+      - name: Run Gate PS-02.1A.8 live PostgreSQL principal separation
+        run: bash tests/postgresql/run_gate0_5_14_8_6_ps021a8.sh
+
       # Migration 0013 remains incompatible with the dedicated session-role model
       # and is intentionally not applied. PS-02.1A.5 uses additive migration 0015,
       # with exact-session registration/revocation tests on PostgreSQL 14–17.

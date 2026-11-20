@@ -35,6 +35,10 @@ for attempt in $(seq 1 40); do
 done
 [[ "$registered" == "2" ]] || {
   echo "FAIL: expected two registered physical backends, found $registered" >&2
+  echo "--- backend A diagnostic ---" >&2
+  cat /tmp/powerops-ps021a5-backend-a.out >&2 || true
+  echo "--- backend B diagnostic ---" >&2
+  cat /tmp/powerops-ps021a5-backend-b.out >&2 || true
   kill "$backend_a" "$backend_b" 2>/dev/null || true
   exit 1
 }

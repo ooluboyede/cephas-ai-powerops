@@ -48,9 +48,6 @@ GRANT SELECT ON powerops_security.cluster_identity,
                 powerops_security.human_actor_binding,
                 powerops_security.role_scope_binding
     TO powerops_session_control;
-GRANT UPDATE ON powerops_security.human_session_actor_binding,
-                powerops_security.role_scope_binding
-    TO powerops_session_control;
 
 CREATE TABLE powerops_security.human_session_backend_registry (
     session_id uuid NOT NULL

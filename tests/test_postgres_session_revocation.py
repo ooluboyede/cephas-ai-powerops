@@ -132,7 +132,9 @@ def test_fence_commit_uncertainty_fails_closed_without_secret_disclosure():
 
 
 def test_same_factory_cannot_be_used_for_both_privilege_domains():
-    factory = lambda: Connection((None,))
+    def factory():
+        return Connection((None,))
+
     with pytest.raises(ValueError, match="separate factories"):
         PsycopgSessionBackendRevocationControl(
             provisioner_connection_factory=factory,

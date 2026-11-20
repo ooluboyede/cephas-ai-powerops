@@ -50,12 +50,46 @@ class FakeProvider:
         yield self.credentials
 
 
+class FakeResult:
+    def __init__(self, row: object) -> None:
+        self._row = row
+
+    def fetchone(self) -> object:
+        return self._row
+
+
 class FakeConnection:
+    def __init__(self, registration_row: object | None = None) -> None:
+        self.registration_row = (
+            {"registered": True} if registration_row is None else registration_row
+        )
+        self.events: list[str] = []
+        self.closed = False
+
     def __enter__(self) -> FakeConnection:
         return self
 
     def __exit__(self, *args: object) -> None:
+        self.closed = True
+        self.events.append("close")
         return None
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        self.events.append("begin")
+        try:
+            yield
+        except Exception:
+            self.events.append("rollback")
+            raise
+        else:
+            self.events.append("commit")
+
+    def execute(self, query: str, params: tuple[str]) -> FakeResult:
+        self.events.append("register")
+        assert "register_human_session_backend" in query
+        assert params == (str(principal().session_id),)
+        return FakeResult(self.registration_row)
 
 
 def credentials(tmp_path: Path, **overrides: object) -> HumanPostgresCredentials:
@@ -293,6 +327,7 @@ def test_connector_opens_fresh_verify_full_tls_connection(tmp_path: Path) -> Non
     assert captured["autocommit"] is False
     assert "dsn" not in captured
     assert "options" not in captured
+    assert connection.events == ["begin", "register", "commit", "close"]
 
 
 @pytest.mark.parametrize(
@@ -379,3 +414,47 @@ def test_connector_fails_closed_when_credential_provider_is_unavailable(
     with pytest.raises(HumanSessionRejected, match="unavailable"):
         with connector.connect(principal()):
             pytest.fail("Unavailable provider must not open a database connection")
+
+
+
+@pytest.mark.parametrize("registration_row", [None, {}, {"registered": False}, {"registered": 1}])
+def test_connector_fails_closed_when_backend_registration_is_not_confirmed(
+    tmp_path: Path, registration_row: object
+) -> None:
+    connection = FakeConnection(registration_row)
+    connector = PsycopgHumanSessionConnector(
+        FakeProvider(credentials(tmp_path)),
+        connect_factory=lambda **kwargs: connection,
+    )
+
+    with pytest.raises(HumanSessionRejected, match="admission"):
+        with connector.connect(principal()):
+            pytest.fail("Unconfirmed backend registration must not yield SQL access")
+
+    assert connection.closed is True
+    assert connection.events == ["begin", "register", "rollback", "close"]
+
+
+def test_connector_closes_without_yielding_when_registration_commit_fails(
+    tmp_path: Path,
+) -> None:
+    class CommitFailureConnection(FakeConnection):
+        @contextmanager
+        def transaction(self) -> Iterator[None]:
+            self.events.append("begin")
+            yield
+            self.events.append("commit_attempt")
+            raise RuntimeError("synthetic uncertain commit outcome")
+
+    connection = CommitFailureConnection()
+    connector = PsycopgHumanSessionConnector(
+        FakeProvider(credentials(tmp_path)),
+        connect_factory=lambda **kwargs: connection,
+    )
+
+    with pytest.raises(HumanSessionRejected, match="unavailable"):
+        with connector.connect(principal()):
+            pytest.fail("A connection with uncertain registration commit must not be yielded")
+
+    assert connection.closed is True
+    assert connection.events == ["begin", "register", "commit_attempt", "close"]

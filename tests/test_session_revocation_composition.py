@@ -228,4 +228,5 @@ def test_composition_fails_closed_when_audit_role_has_direct_table_access():
             expected_provisioner_login="powerops_provisioner",
             expected_termination_login="powerops_termination",
             expected_audit_login="powerops_audit",
+            credential_receipt_verifier=receipt_verifier(store),
         )

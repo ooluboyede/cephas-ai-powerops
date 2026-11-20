@@ -30,7 +30,8 @@ BEGIN
             WHERE membership.member = v_role.oid
                OR membership.roleid = v_role.oid
        ) THEN
-        RAISE EXCEPTION 'powerops_revocation_auditor must be a NOLOGIN, unprivileged, unmembered owner';
+        RAISE EXCEPTION
+            'powerops_revocation_auditor must be a NOLOGIN, unprivileged, unmembered owner';
     END IF;
 END
 $verify_role$;
@@ -66,6 +67,14 @@ CREATE TABLE powerops_security.human_session_revocation_audit (
 ALTER TABLE powerops_security.human_session_revocation_audit
     OWNER TO powerops_revocation_auditor;
 REVOKE ALL ON powerops_security.human_session_revocation_audit FROM PUBLIC;
+
+-- Remove the previous boolean-only function contract on an in-place upgrade.
+REVOKE ALL ON FUNCTION powerops_security.record_human_session_revocation_audit(
+    text, text, uuid, text, integer, boolean, boolean, boolean
+) FROM PUBLIC;
+DROP FUNCTION IF EXISTS powerops_security.record_human_session_revocation_audit(
+    text, text, uuid, text, integer, boolean, boolean, boolean
+);
 
 CREATE OR REPLACE FUNCTION powerops_security.record_human_session_revocation_audit(
     p_event_type text,
@@ -149,7 +158,7 @@ ALTER FUNCTION powerops_security.record_human_session_revocation_audit(
     text, text, uuid, text, integer, boolean, boolean, boolean, jsonb, text
 ) OWNER TO powerops_revocation_auditor;
 REVOKE ALL ON FUNCTION powerops_security.record_human_session_revocation_audit(
-    text, text, uuid, text, integer, boolean, boolean, boolean
+    text, text, uuid, text, integer, boolean, boolean, boolean, jsonb, text
 ) FROM PUBLIC;
 
 -- Customer DBA must grant EXECUTE only to a separately authenticated,

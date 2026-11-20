@@ -17,7 +17,7 @@ Migration `0014_per_session_human_login_identity.sql` adds a protected `human_se
 - creates the session-to-actor mapping before the transaction can commit;
 - grants the same database-derived human resolver and Revenue Assurance permissions to the new session login.
 
-The revised `resolve_authenticated_human_actor_v2()` maps session login → session binding → current actor row. Legacy directly provisioned human logins retain their previous resolution path. A session row that exists but is inactive/expired cannot fall back to the legacy actor path.
+The revised `resolve_authenticated_human_actor_v2()` maps session login → session binding → current actor row. Legacy directly provisioned human logins retain their previous resolution path. A session row that exists but is inactive/expired cannot fall back to the legacy actor path. The lower-level `resolve_authenticated_scope()` used by RLS also checks session expiry/revocation and the current actor's active entitlement, preventing expired sessions or actor-wide revocation from retaining ordinary scoped table access. The existing actor-revocation function now retires and tombstones every active session login for that actor, setting each to NOLOGIN.
 
 The human audit trigger now recognizes dedicated session roles and derives their actor from the same resolver.
 
@@ -32,6 +32,7 @@ The human audit trigger now recognizes dedicated session roles and derives their
 - no role membership edges;
 - denial of direct runtime access to protected session bindings;
 - exact-session retirement while the other session remains usable;
+- actor-wide revocation cascading to all remaining session logins;
 - rejection of reused session UUIDs and role names.
 
 ## Explicit limitations
@@ -39,7 +40,7 @@ The human audit trigger now recognizes dedicated session roles and derives their
 - The migration and test harness are committed but have **not yet been executed**. No PostgreSQL 14–17 pass is claimed.
 - The broker still issues certificates against the actor's pre-existing role. Broker integration must call this provisioning function first, bind the returned unique role into the certificate CN, and compensate by retiring the exact role if signing or credential persistence fails.
 - The connector still does not register the session UUID/backend association before application SQL. Exact backend admission registration and termination remain separate PS-02 work.
-- This migration does not terminate already-connected backends on retirement; it prevents future login and causes human actor resolution to fail. Do not claim instantaneous physical connection termination.
+- This migration does not terminate already-connected backends on retirement; it prevents future login and causes the RLS scope resolver and human actor resolver to fail closed. Do not claim instantaneous physical connection termination.
 - Customer DBA approval and least-privilege review of role creation/control-plane grants remain required.
 - Migration 0013 remains an unaccepted attempt and is not applied by CI or customer deployments.
 

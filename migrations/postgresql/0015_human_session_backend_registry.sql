@@ -34,9 +34,16 @@ BEGIN
        OR v_role.rolcreaterole OR NOT v_role.rolinherit
        OR v_role.rolreplication OR v_role.rolbypassrls
        OR EXISTS (
-           SELECT 1 FROM pg_catalog.pg_auth_members AS membership
-            WHERE membership.member = v_role.oid
-               OR membership.roleid = v_role.oid
+           SELECT 1
+             FROM pg_catalog.pg_auth_members AS membership
+            WHERE membership.roleid = v_role.oid
+               OR (
+                   membership.member = v_role.oid
+                   AND membership.roleid NOT IN (
+                       SELECT oid FROM pg_catalog.pg_roles
+                        WHERE rolname IN ('pg_signal_backend', 'pg_read_all_stats')
+                   )
+               )
        ) THEN
         RAISE EXCEPTION 'powerops_session_control must be a NOLOGIN, non-privileged INHERIT role';
     END IF;

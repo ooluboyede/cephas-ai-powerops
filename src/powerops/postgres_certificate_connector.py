@@ -261,9 +261,10 @@ class PsycopgHumanSessionConnector:
             materialized = self._credential_provider.materialize_credentials(principal)
             with materialized as credentials:
                 yield from self._connect_with_credentials(principal, credentials)
-        except HumanSessionRejected:
-            raise
         except Exception:
+            # This is the public connector boundary. Even an already-translated
+            # HumanSessionRejected may have been raised with a provider exception
+            # as its cause; never preserve that chain across this boundary.
             raise HumanSessionRejected(
                 "Customer human-session credentials are unavailable"
             ) from None

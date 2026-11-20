@@ -36,7 +36,8 @@ class PostgresSessionRevocationAudit:
         backend_termination_verified: bool,
     ) -> None:
         if (
-            event_type not in {
+            not isinstance(event_type, str)
+            or event_type not in {
                 "human_database_session_revoked",
                 "human_database_session_revocation_attempt",
             }
@@ -44,6 +45,7 @@ class PostgresSessionRevocationAudit:
             or not actor_subject.strip()
             or len(actor_subject) > 200
             or not isinstance(session_id, UUID)
+            or not isinstance(outcome, str)
             or outcome not in {"verified", "incomplete"}
             or isinstance(terminated_backend_count, bool)
             or not isinstance(terminated_backend_count, int)

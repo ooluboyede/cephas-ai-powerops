@@ -247,7 +247,9 @@ class PsycopgHumanSessionConnector:
         try:
             metadata = path.stat()
         except OSError:
-            raise HumanSessionRejected("Required customer certificate file is unavailable") from None
+            raise HumanSessionRejected(
+                "Required customer certificate file is unavailable"
+            ) from None
         if not stat.S_ISREG(metadata.st_mode):
             raise HumanSessionRejected("Customer certificate paths must reference regular files")
         if private and stat.S_IMODE(metadata.st_mode) & 0o077:

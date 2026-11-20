@@ -53,6 +53,24 @@ class StaticDirectory:
         return self.principal
 
 
+class InMemorySessionProvisioner:
+    def __init__(self) -> None:
+        self.provisioned: dict[UUID, str] = {}
+        self.retired: list[UUID] = []
+
+    def provision_session(self, *, session_id: UUID, role_name: str, issuer: str,
+                          subject: str, tenant_id: UUID, business_unit_id: UUID,
+                          expires_at: datetime) -> int:
+        assert role_name.startswith("pwr_")
+        assert session_id not in self.provisioned
+        self.provisioned[session_id] = role_name
+        return len(self.provisioned) + 1000
+
+    def retire_session(self, *, session_id: UUID, reason: str) -> None:
+        self.retired.append(session_id)
+        self.provisioned.pop(session_id, None)
+
+
 class InMemoryReplayGuard:
     """Test-only atomicity model; production must use a shared durable store."""
 
@@ -183,6 +201,7 @@ def build_fixture() -> tuple[DatabaseSessionBroker, BrokerPrincipal, DisposableC
         directory=StaticDirectory(directory_principal),
         replay_guard=InMemoryReplayGuard(),
         certificate_issuer=signer,
+        session_provisioner=InMemorySessionProvisioner(),
     )
     return broker, principal, signer
 
@@ -208,7 +227,8 @@ def test_broker_issues_short_lived_certificate_for_directory_role() -> None:
 
     certificate = x509.load_pem_x509_certificate(issued.certificate_pem.encode("ascii"))
     common_name = certificate.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
-    assert issued.database_role == "pwr_finance_user_001"
+    assert issued.database_role.startswith("pwr_")
+    assert issued.database_role != "pwr_finance_user_001"
     assert issued.issuer == principal.issuer
     assert issued.subject == principal.subject
     assert issued.tenant_id == principal.tenant_id
@@ -216,7 +236,7 @@ def test_broker_issues_short_lived_certificate_for_directory_role() -> None:
     assert issued.finance_operator is False
     assert issued.finance_verifier is True
     assert len(common_name) == 1
-    assert common_name[0].value == "pwr_finance_user_001"
+    assert common_name[0].value == issued.database_role
     assert issued.expires_at <= now + timedelta(seconds=120)
     assert issued.expires_at <= principal.expires_at
 
@@ -256,7 +276,8 @@ def test_broker_issues_separate_finance_operator_session() -> None:
         csr_pem=make_csr(),
     )
 
-    assert issued.database_role == "pwr_finance_operator_001"
+    assert issued.database_role.startswith("pwr_")
+    assert issued.database_role != "pwr_finance_operator_001"
     assert issued.finance_operator is True
     assert issued.finance_verifier is False
 

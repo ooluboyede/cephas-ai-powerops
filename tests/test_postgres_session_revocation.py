@@ -88,7 +88,6 @@ def test_termination_uses_separate_identity_and_requires_complete_result():
 @pytest.mark.parametrize(
     "row",
     [
-        (1, 1, False),
         (True, 0, True),
         (-1, 0, True),
         (0, -1, False),
@@ -140,3 +139,12 @@ def test_same_factory_cannot_be_used_for_both_privilege_domains():
             provisioner_connection_factory=factory,
             termination_connection_factory=factory,
         )
+
+
+def test_incomplete_but_well_formed_termination_is_left_for_coordinator_verification():
+    session_id = uuid4()
+    termination = Connection((1, 2, False))
+    control = make_control(Connection((None,)), termination)
+
+    assert control.terminate_session_backends(session_id) == 1
+    assert termination.commits == 1

@@ -26,6 +26,12 @@ SELECT pg_catalog.jsonb_build_object(
         pg_catalog.pg_has_role(
             session_user, 'powerops_revocation_auditor', 'MEMBER'
         ),
+    'pg_read_all_stats_member',
+        pg_catalog.pg_has_role(session_user, 'pg_read_all_stats', 'MEMBER'),
+    'pg_monitor_member',
+        pg_catalog.pg_has_role(session_user, 'pg_monitor', 'MEMBER'),
+    'pg_signal_backend_member',
+        pg_catalog.pg_has_role(session_user, 'pg_signal_backend', 'MEMBER'),
     'can_retire',
         pg_catalog.has_function_privilege(
             session_user,
@@ -72,6 +78,43 @@ SELECT pg_catalog.jsonb_build_object(
             session_user,
             'powerops_security.human_session_backend_registry', 'TRUNCATE'
         ),
+    'session_binding_direct_access',
+        pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_actor_binding', 'SELECT'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_actor_binding', 'INSERT'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_actor_binding', 'UPDATE'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_actor_binding', 'DELETE'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_actor_binding', 'TRUNCATE'
+        ),
+    'actor_binding_direct_access',
+        pg_catalog.has_table_privilege(
+            session_user, 'powerops_security.human_actor_binding', 'SELECT'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user, 'powerops_security.human_actor_binding', 'INSERT'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user, 'powerops_security.human_actor_binding', 'UPDATE'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user, 'powerops_security.human_actor_binding', 'DELETE'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user, 'powerops_security.human_actor_binding', 'TRUNCATE'
+        ),
     'backend_audit_direct_access',
         pg_catalog.has_table_privilege(
             session_user,
@@ -92,6 +135,10 @@ SELECT pg_catalog.jsonb_build_object(
         OR pg_catalog.has_table_privilege(
             session_user,
             'powerops_security.human_session_backend_audit', 'TRUNCATE'
+        ),
+    'pg_stat_direct_access',
+        pg_catalog.has_table_privilege(
+            session_user, 'pg_catalog.pg_stat_activity', 'SELECT'
         ),
     'revocation_audit_direct_access',
         pg_catalog.has_table_privilege(
@@ -160,12 +207,18 @@ def _verify_one(
     required_booleans = (
         "session_control_member",
         "revocation_auditor_member",
+        "pg_read_all_stats_member",
+        "pg_monitor_member",
+        "pg_signal_backend_member",
         "can_retire",
         "can_terminate",
         "can_count",
         "can_audit",
         "registry_direct_access",
+        "session_binding_direct_access",
+        "actor_binding_direct_access",
         "backend_audit_direct_access",
+        "pg_stat_direct_access",
         "revocation_audit_direct_access",
     )
     if (
@@ -190,8 +243,14 @@ def _verify_one(
         or actual != allowed
         or row["session_control_member"]
         or row["revocation_auditor_member"]
+        or row["pg_read_all_stats_member"]
+        or row["pg_monitor_member"]
+        or row["pg_signal_backend_member"]
         or row["registry_direct_access"]
+        or row["session_binding_direct_access"]
+        or row["actor_binding_direct_access"]
         or row["backend_audit_direct_access"]
+        or row["pg_stat_direct_access"]
         or row["revocation_audit_direct_access"]
     ):
         raise PostgresPrincipalVerificationError(

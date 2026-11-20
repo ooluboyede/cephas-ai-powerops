@@ -24,11 +24,18 @@ BEGIN
      WHERE role.rolname = 'powerops_revocation_auditor';
     IF v_role.rolcanlogin OR v_role.rolsuper OR v_role.rolcreatedb
        OR v_role.rolcreaterole OR v_role.rolinherit
-       OR v_role.rolreplication OR v_role.rolbypassrls THEN
-        RAISE EXCEPTION 'powerops_revocation_auditor must be a NOLOGIN non-privileged owner';
+       OR v_role.rolreplication OR v_role.rolbypassrls
+       OR EXISTS (
+           SELECT 1 FROM pg_catalog.pg_auth_members AS membership
+            WHERE membership.member = v_role.oid
+               OR membership.roleid = v_role.oid
+       ) THEN
+        RAISE EXCEPTION 'powerops_revocation_auditor must be a NOLOGIN, unprivileged, unmembered owner';
     END IF;
 END
 $verify_role$;
+
+GRANT USAGE ON SCHEMA powerops_security TO powerops_revocation_auditor;
 
 CREATE TABLE powerops_security.human_session_revocation_audit (
     audit_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

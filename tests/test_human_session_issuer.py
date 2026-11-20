@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -37,10 +37,7 @@ def principal() -> AuthenticatedPrincipal:
 class FakeBroker:
     issued: IssuedDatabaseSession
     csr_pem: str = ""
-    retired: list[UUID] = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        self.retired = []
+    retired: list[UUID] = field(default_factory=list)
 
     def issue_session(self, *, token: str, csr_pem: str) -> IssuedDatabaseSession:
         assert token == "fresh-step-up-token"

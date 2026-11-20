@@ -398,6 +398,106 @@ REVOKE ALL ON FUNCTION powerops_security.retire_human_session_login(uuid, text)
 GRANT EXECUTE ON FUNCTION powerops_security.retire_human_session_login(uuid, text)
     TO powerops_provisioner;
 
+-- Actor-wide revocation also retires every session login derived from the
+-- actor. This preserves the existing function contract while closing the
+-- session-role bypass introduced by one-login-per-session provisioning.
+CREATE OR REPLACE FUNCTION powerops_security.revoke_human_actor_login(
+    p_role_name name,
+    p_revocation_reason text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, powerops_security
+AS $function$
+DECLARE
+    v_cluster_id uuid;
+    v_role_oid oid;
+    v_session record;
+BEGIN
+    IF p_role_name IS NULL OR p_revocation_reason IS NULL
+       OR length(btrim(p_revocation_reason)) < 8
+       OR length(p_revocation_reason) > 500 THEN
+        RAISE EXCEPTION 'invalid human actor revocation request'
+            USING ERRCODE = '22023';
+    END IF;
+
+    SELECT ci.cluster_id INTO STRICT v_cluster_id
+      FROM powerops_security.cluster_identity AS ci
+     WHERE ci.singleton;
+
+    SELECT actor.role_oid INTO STRICT v_role_oid
+      FROM powerops_security.human_actor_binding AS actor
+      JOIN powerops_security.role_scope_binding AS actor_scope
+        ON actor_scope.cluster_id = actor.cluster_id
+       AND actor_scope.role_oid = actor.role_oid
+       AND actor_scope.role_name = p_role_name
+     WHERE actor.cluster_id = v_cluster_id
+       AND actor.active
+     FOR UPDATE OF actor;
+
+    UPDATE powerops_security.human_actor_binding
+       SET active = false, revoked_at = pg_catalog.clock_timestamp(),
+           revoked_by = session_user, revocation_reason = p_revocation_reason
+     WHERE cluster_id = v_cluster_id AND role_oid = v_role_oid;
+
+    INSERT INTO powerops_security.retired_role_identity (
+        cluster_id, role_oid, role_name, retirement_reason
+    ) VALUES (
+        v_cluster_id, v_role_oid, p_role_name, p_revocation_reason
+    ) ON CONFLICT DO NOTHING;
+
+    UPDATE powerops_security.role_scope_binding
+       SET active = false
+     WHERE cluster_id = v_cluster_id AND role_oid = v_role_oid;
+
+    EXECUTE pg_catalog.format('ALTER ROLE %I NOLOGIN', p_role_name);
+
+    FOR v_session IN
+        SELECT binding.session_id, binding.session_role_oid, binding.session_role_name
+          FROM powerops_security.human_session_actor_binding AS binding
+         WHERE binding.cluster_id = v_cluster_id
+           AND binding.actor_role_oid = v_role_oid
+           AND binding.active
+         FOR UPDATE
+    LOOP
+        UPDATE powerops_security.human_session_actor_binding
+           SET active = false, revoked_at = pg_catalog.clock_timestamp(),
+               revoked_by = session_user, revocation_reason = p_revocation_reason
+         WHERE session_id = v_session.session_id AND active;
+
+        UPDATE powerops_security.role_scope_binding
+           SET active = false
+         WHERE cluster_id = v_cluster_id
+           AND role_oid = v_session.session_role_oid;
+
+        INSERT INTO powerops_security.retired_role_identity (
+            cluster_id, role_oid, role_name, retirement_reason
+        ) VALUES (
+            v_cluster_id, v_session.session_role_oid,
+            v_session.session_role_name, p_revocation_reason
+        ) ON CONFLICT DO NOTHING;
+
+        IF EXISTS (
+            SELECT 1 FROM pg_catalog.pg_roles
+             WHERE oid = v_session.session_role_oid
+               AND rolname = v_session.session_role_name
+        ) THEN
+            EXECUTE pg_catalog.format(
+                'ALTER ROLE %I NOLOGIN', v_session.session_role_name
+            );
+        END IF;
+    END LOOP;
+END
+$function$;
+
+ALTER FUNCTION powerops_security.revoke_human_actor_login(name, text)
+    OWNER TO powerops_provisioner;
+REVOKE ALL ON FUNCTION powerops_security.revoke_human_actor_login(name, text)
+    FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION powerops_security.revoke_human_actor_login(name, text)
+    TO powerops_provisioner;
+
 -- Audit actor detection must include dedicated session roles. An inactive or
 -- expired session row is still recognized as human and therefore cannot fall
 -- through to legacy service-role audit behavior.

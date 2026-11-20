@@ -87,7 +87,7 @@ BEGIN
             USING ERRCODE = '22023';
     END IF;
 
-    IF (p_outcome = 'verified') IS DISTINCT FROM (
+    IF p_outcome = 'verified' AND NOT (
         p_credential_revoked AND p_admission_fenced
         AND p_backend_termination_verified
     ) THEN

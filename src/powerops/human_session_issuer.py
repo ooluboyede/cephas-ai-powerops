@@ -151,6 +151,15 @@ class HumanSessionCredentialStore(Protocol):
         Never search or fall back to another session.
         """
 
+    def get_session_scope(
+        self, session_id: UUID
+    ) -> tuple[UUID, UUID] | None:
+        """Return only the exact active session's tenant and business-unit IDs.
+
+        This metadata-only lookup must not materialize certificate/private-key
+        material. Missing, expired, or revoked sessions return None.
+        """
+
     def revoke_session(self, session_id: UUID) -> None:
         """Revoke the exact session UUID and prevent all subsequent retrieval.
 

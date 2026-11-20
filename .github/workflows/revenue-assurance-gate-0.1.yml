@@ -111,6 +111,9 @@ jobs:
       - name: Run Gate 0.5.14.5 database-derived finance actors
         run: bash tests/postgresql/run_gate0_5_14_5.sh
 
+      - name: Run Gate PS-02.1A.3 per-session PostgreSQL login identities
+        run: bash tests/postgresql/run_gate0_5_14_8_6_ps021a3.sh
+
       # PS-02.1A: migration 0013 is an unaccepted implementation attempt.
       # Do not apply it in CI or customer databases. Re-enable the exact-session
       # registry only after a corrected per-session login-role migration and

@@ -58,9 +58,16 @@ class FakeResult:
         return self._row
 
 
+_DEFAULT_REGISTRATION_ROW = object()
+
+
 class FakeConnection:
-    def __init__(self, registration_row: object = {"registered": True}) -> None:
-        self.registration_row = registration_row
+    def __init__(self, registration_row: object = _DEFAULT_REGISTRATION_ROW) -> None:
+        self.registration_row = (
+            {"registered": True}
+            if registration_row is _DEFAULT_REGISTRATION_ROW
+            else registration_row
+        )
         self.events: list[str] = []
         self.closed = False
 

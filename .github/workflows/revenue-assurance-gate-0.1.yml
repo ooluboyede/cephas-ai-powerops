@@ -91,6 +91,9 @@ jobs:
       - name: Python tests
         run: .venv/bin/pytest
 
+      - name: PostgreSQL revocation adapter and audit focused tests
+        run: .venv/bin/pytest -q tests/test_postgres_session_revocation.py tests/test_postgres_session_revocation_audit.py
+
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
@@ -113,6 +116,11 @@ jobs:
 
       - name: Run Gate PS-02.1A.3 and PS-02.1A.5 per-session identity and backend registry tests
         run: bash tests/postgresql/run_gate0_5_14_8_6_ps021a3.sh
+
+      - name: Run Gate PS-02.1A.7 append-only revocation audit integration test
+        env:
+          POWEROPS_TEST_ADMIN_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: bash tests/postgresql/run_gate0_5_14_8_6_ps021a7.sh
 
       # Migration 0013 remains incompatible with the dedicated session-role model
       # and is intentionally not applied. PS-02.1A.5 uses additive migration 0015,

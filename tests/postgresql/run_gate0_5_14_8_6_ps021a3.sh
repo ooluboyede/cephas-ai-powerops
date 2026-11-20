@@ -71,4 +71,14 @@ if admin -c "SELECT powerops_security.provision_human_session_login('a1400000-00
   echo "FAIL: existing session role name was reused" >&2; exit 1
 fi
 
+echo "[Gate PS-02.1A.3] Actor-wide revocation retires every remaining session login"
+admin -c "SELECT powerops_security.revoke_human_actor_login('pwr_gate0144_operator','Gate PS-02.1A.3 actor-wide session revocation test')"
+role_b_after_actor_revoke=$(admin -Atc "SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname='pwr_gate141a_sess_b'")
+[[ "$role_b_after_actor_revoke" == "f" ]] || {
+  echo "FAIL: actor-wide revocation left a session login enabled" >&2; exit 1;
+}
+if actor pwr_gate141a_sess_b -c 'SELECT * FROM powerops_security.resolve_authenticated_human_actor_v2()' >/tmp/powerops-ps021a3-actor-revoked.out 2>&1; then
+  echo "FAIL: session resolved after its actor was revoked" >&2; exit 1
+fi
+
 echo "[Gate PS-02.1A.3] PASS — dedicated session-role identity, actor entitlement mapping and exact login retirement validated"

@@ -5,6 +5,9 @@ from collections.abc import Callable
 from typing import Any
 
 from powerops.human_session_issuer import HumanSessionCredentialStore
+from powerops.postgres_principal_verification import (
+    verify_revocation_postgres_principals,
+)
 from powerops.postgres_session_revocation import (
     ConnectionFactory,
     PsycopgSessionBackendRevocationControl,
@@ -21,13 +24,17 @@ def build_human_session_revocation_coordinator(
     provisioner_connection_factory: ConnectionFactory,
     termination_connection_factory: ConnectionFactory,
     audit_connection_factory: Callable[[], Any],
+    expected_provisioner_login: str,
+    expected_termination_login: str,
+    expected_audit_login: str,
 ) -> HumanSessionRevocationCoordinator:
-    """Compose revocation using three independent customer trust boundaries.
+    """Verify actual PostgreSQL identities before composing revocation.
 
-    The encrypted credential store is supplied by the customer deployment;
-    this function deliberately does not invent a vault provider or fall back
-    to a shared database credential. PostgreSQL fence, backend termination,
-    and audit writes each receive separate connection factories.
+    Customer deployment must supply three independently configured factories
+    and the expected PostgreSQL login names. Each connection is queried for
+    session_user/current_user, role memberships, narrowly scoped function
+    EXECUTE grants, and direct access to protected registry/audit tables.
+    The encrypted credential store remains customer supplied.
     """
     factories = (
         provisioner_connection_factory,
@@ -37,7 +44,16 @@ def build_human_session_revocation_coordinator(
     if any(not callable(factory) for factory in factories):
         raise ValueError("All customer revocation connection factories are required")
     if len({id(factory) for factory in factories}) != len(factories):
-        raise ValueError("Fence, termination and audit credentials must be separate")
+        raise ValueError("Fence, termination and audit credentials must use separate factories")
+
+    verify_revocation_postgres_principals(
+        provisioner_connection_factory=provisioner_connection_factory,
+        termination_connection_factory=termination_connection_factory,
+        audit_connection_factory=audit_connection_factory,
+        expected_provisioner_login=expected_provisioner_login,
+        expected_termination_login=expected_termination_login,
+        expected_audit_login=expected_audit_login,
+    )
 
     backend_control = PsycopgSessionBackendRevocationControl(
         provisioner_connection_factory=provisioner_connection_factory,

@@ -19,9 +19,13 @@ SELECT pg_catalog.jsonb_build_object(
     'session_user', session_user::text,
     'current_user', current_user::text,
     'session_control_member',
-        pg_catalog.pg_has_role(session_user, 'powerops_session_control', 'MEMBER'),
+        pg_catalog.pg_has_role(
+            session_user, 'powerops_session_control', 'MEMBER'
+        ),
     'revocation_auditor_member',
-        pg_catalog.pg_has_role(session_user, 'powerops_revocation_auditor', 'MEMBER'),
+        pg_catalog.pg_has_role(
+            session_user, 'powerops_revocation_auditor', 'MEMBER'
+        ),
     'can_retire',
         pg_catalog.has_function_privilege(
             session_user,
@@ -43,27 +47,73 @@ SELECT pg_catalog.jsonb_build_object(
     'can_audit',
         pg_catalog.has_function_privilege(
             session_user,
-            'powerops_security.record_human_session_revocation_audit(text,text,uuid,text,integer,boolean,boolean,boolean)',
+            'powerops_security.record_human_session_revocation_audit('
+            'text,text,uuid,text,integer,boolean,boolean,boolean)',
             'EXECUTE'
         ),
     'registry_direct_access',
-        pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_backend_registry', 'SELECT')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_backend_registry', 'INSERT')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_backend_registry', 'UPDATE')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_backend_registry', 'DELETE')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_backend_registry', 'TRUNCATE'),
+        pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_backend_registry', 'SELECT'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_backend_registry', 'INSERT'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_backend_registry', 'UPDATE'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_backend_registry', 'DELETE'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_backend_registry', 'TRUNCATE'
+        ),
     'backend_audit_direct_access',
-        pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_backend_audit', 'SELECT')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_backend_audit', 'INSERT')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_backend_audit', 'UPDATE')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_backend_audit', 'DELETE')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_backend_audit', 'TRUNCATE'),
+        pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_backend_audit', 'SELECT'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_backend_audit', 'INSERT'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_backend_audit', 'UPDATE'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_backend_audit', 'DELETE'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_backend_audit', 'TRUNCATE'
+        ),
     'revocation_audit_direct_access',
-        pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_revocation_audit', 'SELECT')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_revocation_audit', 'INSERT')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_revocation_audit', 'UPDATE')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_revocation_audit', 'DELETE')
-        OR pg_catalog.has_table_privilege(session_user, 'powerops_security.human_session_revocation_audit', 'TRUNCATE')
+        pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_revocation_audit', 'SELECT'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_revocation_audit', 'INSERT'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_revocation_audit', 'UPDATE'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_revocation_audit', 'DELETE'
+        )
+        OR pg_catalog.has_table_privilege(
+            session_user,
+            'powerops_security.human_session_revocation_audit', 'TRUNCATE'
+        )
 )
 """
 

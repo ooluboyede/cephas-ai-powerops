@@ -13,6 +13,7 @@ from uuid import UUID
 
 from powerops.auth import AuthenticatedPrincipal
 from powerops.credential_revocation_attestation import (
+    CredentialRevocationReceipt,
     CredentialRevocationReceiptVerifier,
 )
 from powerops.human_session_issuer import HumanSessionCredentialStore
@@ -70,8 +71,9 @@ class SessionRevocationAudit(Protocol):
         credential_revoked: bool,
         admission_fenced: bool,
         backend_termination_verified: bool,
+        credential_receipt: CredentialRevocationReceipt | None,
     ) -> None:
-        """Persist immutable status without credential or token fields."""
+        """Persist immutable status and optional signed receipt evidence."""
 
 
 class HumanSessionRevocationCoordinator:
@@ -127,6 +129,7 @@ class HumanSessionRevocationCoordinator:
 
         terminated = 0
         store_revoked = False
+        credential_receipt = None
         fenced = False
         verified = False
 
@@ -134,6 +137,8 @@ class HumanSessionRevocationCoordinator:
         # This minimizes the exposure window during a partial outage.
         try:
             receipt = self._credential_store.revoke_session(session_id)
+            if isinstance(receipt, CredentialRevocationReceipt):
+                credential_receipt = receipt
             store_revoked = self._credential_receipt_verifier.verify(
                 receipt, session_id=session_id
             )
@@ -172,10 +177,12 @@ class HumanSessionRevocationCoordinator:
                     credential_revoked=store_revoked,
                     admission_fenced=fenced,
                     backend_termination_verified=verified,
+                    credential_receipt=credential_receipt,
                 )
             except Exception:
                 self._record_failure(
-                    actor, session_id, terminated, store_revoked, fenced, verified
+                    actor, session_id, terminated, store_revoked, fenced, verified,
+                    credential_receipt,
                 )
                 raise SessionRevocationError(
                     "Revocation completed but its audit record could not be confirmed"
@@ -187,7 +194,8 @@ class HumanSessionRevocationCoordinator:
             )
 
         self._record_failure(
-            actor, session_id, terminated, store_revoked, fenced, verified
+            actor, session_id, terminated, store_revoked, fenced, verified,
+            credential_receipt,
         )
         raise SessionRevocationError(
             "Human database session revocation is incomplete; retry and verify"
@@ -201,6 +209,7 @@ class HumanSessionRevocationCoordinator:
         store_revoked: bool,
         fenced: bool,
         verified: bool,
+        credential_receipt: CredentialRevocationReceipt | None,
     ) -> None:
         # Do not serialize provider exceptions, credentials, or backend details.
         try:
@@ -213,6 +222,7 @@ class HumanSessionRevocationCoordinator:
                 credential_revoked=store_revoked,
                 admission_fenced=fenced,
                 backend_termination_verified=verified,
+                credential_receipt=credential_receipt,
             )
         except Exception:
             # Audit unavailability must not turn a partial revocation into success.

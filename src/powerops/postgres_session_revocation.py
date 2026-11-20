@@ -138,7 +138,7 @@ class PsycopgSessionBackendRevocationControl:
             "FROM powerops_security.terminate_human_session_backends(%s)",
             (str(session_id),),
         )
-        terminated, remaining, complete = self._termination_values(row)
+        terminated, _, _ = self._termination_values(row)
         # An incomplete but well-formed result is not an adapter error: return
         # the signal count so the coordinator can independently query the
         # remaining exact-session backend count and record an honest partial

@@ -48,7 +48,7 @@ SELECT pg_catalog.jsonb_build_object(
         pg_catalog.has_function_privilege(
             session_user,
             'powerops_security.record_human_session_revocation_audit('
-            'text,text,uuid,text,integer,boolean,boolean,boolean)',
+            'text,text,uuid,text,integer,boolean,boolean,boolean,jsonb,text)',
             'EXECUTE'
         ),
     'registry_direct_access',

@@ -63,6 +63,9 @@ remaining=$(actor pwr_gate141a_sess_b -Atc "SELECT actor_subject FROM powerops_s
   echo "FAIL: unrelated session stopped resolving after exact retirement: $remaining" >&2; exit 1;
 }
 
+echo "[Gate PS-02.1A.3] Continue into the dependent PS-02.1A.5 backend registry integration gate"
+bash tests/postgresql/run_gate0_5_14_8_6_ps021a5.sh
+
 echo "[Gate PS-02.1A.3] Session role name and UUID tombstones prevent reuse"
 if admin -c "SELECT powerops_security.provision_human_session_login('a1400000-0000-4000-8000-000000000001','pwr_gate141a_reuse','https://idp.customer.example/tenant-a','human-operator-0144','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','a1000000-0000-4000-8000-000000000001',pg_catalog.clock_timestamp()+interval '2 minutes')" >/tmp/powerops-ps021a3-reuse.out 2>&1; then
   echo "FAIL: retired session UUID was reused" >&2; exit 1

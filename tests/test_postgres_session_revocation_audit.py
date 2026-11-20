@@ -59,12 +59,18 @@ def identity_row(login, *, retire=False, terminate=False, count=False, audit=Fal
         "current_user": login,
         "session_control_member": False,
         "revocation_auditor_member": False,
+        "pg_read_all_stats_member": False,
+        "pg_monitor_member": False,
+        "pg_signal_backend_member": False,
         "can_retire": retire,
         "can_terminate": terminate,
         "can_count": count,
         "can_audit": audit,
         "registry_direct_access": False,
+        "session_binding_direct_access": False,
+        "actor_binding_direct_access": False,
         "backend_audit_direct_access": False,
+        "pg_stat_direct_access": False,
         "revocation_audit_direct_access": False,
     }
 

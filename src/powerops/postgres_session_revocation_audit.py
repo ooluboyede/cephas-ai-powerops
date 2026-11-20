@@ -74,8 +74,12 @@ class PostgresSessionRevocationAudit:
 
         if credential_receipt is not None:
             try:
-                receipt_payload = json.loads(
-                    canonical_receipt_payload(credential_receipt).decode("ascii")
+                receipt_payload = json.dumps(
+                    json.loads(
+                        canonical_receipt_payload(credential_receipt).decode("ascii")
+                    ),
+                    sort_keys=True,
+                    separators=(",", ":"),
                 )
                 receipt_signature = credential_receipt.signature_b64
             except (TypeError, ValueError, UnicodeError):
@@ -99,7 +103,7 @@ class PostgresSessionRevocationAudit:
                 cursor.execute(
                     """
                     SELECT powerops_security.record_human_session_revocation_audit(
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s
                     )
                     """,
                     (

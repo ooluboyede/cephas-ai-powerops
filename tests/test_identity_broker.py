@@ -242,6 +242,24 @@ def test_broker_issues_short_lived_certificate_for_directory_role() -> None:
 
 
 
+def test_broker_retires_exact_session_when_certificate_signing_fails() -> None:
+    broker, _, _ = build_fixture()
+
+    class FailingIssuer:
+        def issue(self, **kwargs: object) -> str:
+            raise RuntimeError("synthetic signer failure")
+
+        def verify_issued_certificate(self, *args: object, **kwargs: object) -> bool:
+            return False
+
+    broker._certificate_issuer = FailingIssuer()  # type: ignore[attr-defined]
+    provisioner = broker._session_provisioner  # type: ignore[attr-defined]
+    with pytest.raises(identity_broker.BrokerDependencyUnavailable):
+        broker.issue_session(token="signed-customer-token", csr_pem=make_csr())
+    assert len(provisioner.retired) == 1
+    assert provisioner.provisioned == {}
+
+
 def test_broker_issues_separate_finance_operator_session() -> None:
     broker, principal, _ = build_fixture()
     operator_principal = BrokerPrincipal(

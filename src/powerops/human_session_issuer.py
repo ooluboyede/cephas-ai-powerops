@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
 from powerops.auth import AuthenticatedPrincipal
+from powerops.credential_revocation_attestation import CredentialRevocationReceipt
 from powerops.identity_broker import (
     BrokerAuthenticationError,
     BrokerAuthorizationError,
@@ -160,9 +161,10 @@ class HumanSessionCredentialStore(Protocol):
         material. Missing, expired, or revoked sessions return None.
         """
 
-    def revoke_session(self, session_id: UUID) -> None:
+    def revoke_session(self, session_id: UUID) -> CredentialRevocationReceipt:
         """Revoke the exact session UUID and prevent all subsequent retrieval.
 
+        Return a provider-signed receipt bound to this exact session UUID.
         Revocation is idempotent. It must not affect any other session UUID.
         A concrete adapter must also arrange termination of already-open
         PostgreSQL backends when required by its deployment security policy.

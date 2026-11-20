@@ -42,6 +42,7 @@ $verify_control_role$;
 -- registered backends. This NOLOGIN role is a function owner, not a login.
 GRANT pg_signal_backend TO powerops_session_control;
 GRANT pg_read_all_stats TO powerops_session_control;
+GRANT USAGE ON SCHEMA powerops_security TO powerops_session_control;
 GRANT SELECT ON powerops_security.cluster_identity,
                 powerops_security.human_session_actor_binding,
                 powerops_security.human_actor_binding,

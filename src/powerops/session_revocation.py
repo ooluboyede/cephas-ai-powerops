@@ -16,6 +16,7 @@ from powerops.human_session_issuer import HumanSessionCredentialStore
 
 
 REVOCATION_ROLE = "powerops_session_revoker"
+GLOBAL_REVOCATION_ROLE = "powerops_global_session_revoker"
 
 
 class SessionRevocationError(RuntimeError):
@@ -88,10 +89,36 @@ class HumanSessionRevocationCoordinator:
         self, *, actor: AuthenticatedPrincipal, session_id: UUID
     ) -> SessionRevocationResult:
         """Revoke one exact session; never report success without verification."""
-        if REVOCATION_ROLE not in actor.roles:
-            raise SessionRevocationError("Actor is not authorized to revoke human sessions")
         if not isinstance(session_id, UUID):
             raise SessionRevocationError("A valid exact session UUID is required")
+
+        # Resolve scope through a metadata-only credential-store operation. Do
+        # not materialize certificates/private keys merely to authorize access.
+        try:
+            target_scope = self._credential_store.get_session_scope(session_id)
+        except Exception:
+            raise SessionRevocationError(
+                "Target human-session authorization could not be verified"
+            ) from None
+        if (
+            not isinstance(target_scope, tuple)
+            or len(target_scope) != 2
+            or not all(isinstance(value, UUID) for value in target_scope)
+        ):
+            raise SessionRevocationError(
+                "Target human-session authorization could not be verified"
+            )
+
+        is_global_revoker = GLOBAL_REVOCATION_ROLE in actor.roles
+        is_scoped_revoker = (
+            REVOCATION_ROLE in actor.roles
+            and actor.tenant_id == target_scope[0]
+            and actor.business_unit_id == target_scope[1]
+        )
+        if not (is_global_revoker or is_scoped_revoker):
+            raise SessionRevocationError(
+                "Actor is not authorized to revoke this tenant/business-unit session"
+            )
 
         terminated = 0
         store_revoked = False

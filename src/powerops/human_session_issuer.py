@@ -40,7 +40,10 @@ class HumanSessionBroker(Protocol):
     """Customer-operated broker that signs a CSR for a provisioned human role."""
 
     def issue_session(self, *, token: str, csr_pem: str) -> IssuedDatabaseSession:
-        """Validate the broker token and return a short-lived role-bound certificate."""
+        """Validate identity, provision one DB login and return its certificate."""
+
+    def retire_session(self, *, session_id: UUID, reason: str) -> None:
+        """Idempotently retire the exact role created for this session UUID."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +195,16 @@ class HumanSessionIssuer:
         ).decode("ascii")
         return csr_pem, private_key_pem
 
+    def _retire_issued_session(self, session_id: UUID) -> None:
+        try:
+            self._broker.retire_session(
+                session_id=session_id, reason="credential_persistence_failed"
+            )
+        except Exception:
+            raise BrokerDependencyUnavailable(
+                "Credential persistence failed and database-session retirement is unconfirmed"
+            ) from None
+
     def create_session(
         self, *, principal: AuthenticatedPrincipal, broker_token: str
     ) -> HumanDatabaseSessionLease:
@@ -218,21 +231,26 @@ class HumanSessionIssuer:
             or issued.finance_operator is not finance_operator
             or issued.finance_verifier is not finance_verifier
         ):
+            self._retire_issued_session(issued.session_id)
             raise BrokerAuthorizationError(
                 "Broker-issued database identity does not match the API principal"
             )
         if not self._ROLE_PATTERN.fullmatch(issued.database_role):
+            self._retire_issued_session(issued.session_id)
             raise BrokerAuthorizationError("Broker returned an invalid database role")
         if "BEGIN CERTIFICATE" not in issued.certificate_pem:
+            self._retire_issued_session(issued.session_id)
             raise BrokerDependencyUnavailable(
                 "Customer broker returned invalid certificate material"
             )
 
         now = datetime.now(UTC)
         if issued.expires_at.tzinfo is None:
+            self._retire_issued_session(issued.session_id)
             raise BrokerAuthenticationError("Broker certificate expiry must be timezone-aware")
         expiry = issued.expires_at.astimezone(UTC)
         if expiry <= now or expiry > now + self._MAX_CERTIFICATE_TTL:
+            self._retire_issued_session(issued.session_id)
             raise BrokerAuthenticationError("Broker certificate expiry is outside policy")
 
         try:
@@ -250,6 +268,7 @@ class HumanSessionIssuer:
                 expires_at=expiry,
             )
         except Exception:
+            self._retire_issued_session(issued.session_id)
             raise BrokerDependencyUnavailable(
                 "Customer human-session credential store is unavailable"
             ) from None

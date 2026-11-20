@@ -55,6 +55,8 @@ CREATE TABLE powerops_security.human_session_revocation_audit (
     outcome text NOT NULL CHECK (outcome IN ('verified', 'incomplete')),
     terminated_backend_count integer NOT NULL CHECK (terminated_backend_count >= 0),
     credential_revoked boolean NOT NULL,
+    credential_receipt_payload jsonb,
+    credential_receipt_signature text,
     admission_fenced boolean NOT NULL,
     backend_termination_verified boolean NOT NULL,
     recorded_by name NOT NULL DEFAULT session_user,
@@ -73,7 +75,9 @@ CREATE OR REPLACE FUNCTION powerops_security.record_human_session_revocation_aud
     p_terminated_backend_count integer,
     p_credential_revoked boolean,
     p_admission_fenced boolean,
-    p_backend_termination_verified boolean
+    p_backend_termination_verified boolean,
+    p_credential_receipt_payload jsonb,
+    p_credential_receipt_signature text
 )
 RETURNS bigint
 LANGUAGE plpgsql
@@ -95,7 +99,12 @@ BEGIN
       OR p_terminated_backend_count < 0
       OR p_credential_revoked IS NULL
       OR p_admission_fenced IS NULL
-      OR p_backend_termination_verified IS NULL THEN
+      OR p_backend_termination_verified IS NULL
+      OR ((p_credential_receipt_payload IS NULL)
+          <> (p_credential_receipt_signature IS NULL))
+      OR (p_credential_receipt_payload IS NOT NULL
+          AND p_credential_receipt_payload ->> 'session_id'
+              IS DISTINCT FROM p_session_id::text) THEN
         RAISE EXCEPTION 'invalid session revocation audit event'
             USING ERRCODE = '22023';
     END IF;
@@ -110,7 +119,9 @@ BEGIN
         IF v_remaining_backends <> 0
            OR NOT p_admission_fenced
            OR NOT p_backend_termination_verified
-           OR NOT p_credential_revoked THEN
+           OR NOT p_credential_revoked
+           OR p_credential_receipt_payload IS NULL
+           OR p_credential_receipt_signature IS NULL THEN
             RAISE EXCEPTION
                 'verified audit event lacks independently confirmed containment'
                 USING ERRCODE = '22023';
@@ -120,10 +131,12 @@ BEGIN
     INSERT INTO powerops_security.human_session_revocation_audit (
         event_type, actor_subject, session_id, outcome,
         terminated_backend_count, credential_revoked,
+        credential_receipt_payload, credential_receipt_signature,
         admission_fenced, backend_termination_verified
     ) VALUES (
         p_event_type, p_actor_subject, p_session_id, p_outcome,
         p_terminated_backend_count, p_credential_revoked,
+        p_credential_receipt_payload, p_credential_receipt_signature,
         p_admission_fenced, p_backend_termination_verified
     )
     RETURNING audit_id INTO v_audit_id;
@@ -133,7 +146,7 @@ END
 $function$;
 
 ALTER FUNCTION powerops_security.record_human_session_revocation_audit(
-    text, text, uuid, text, integer, boolean, boolean, boolean
+    text, text, uuid, text, integer, boolean, boolean, boolean, jsonb, text
 ) OWNER TO powerops_revocation_auditor;
 REVOKE ALL ON FUNCTION powerops_security.record_human_session_revocation_audit(
     text, text, uuid, text, integer, boolean, boolean, boolean

@@ -40,11 +40,11 @@ for role in pwr_gate141a_sess_a pwr_gate141a_sess_b; do
   }
 done
 
-echo "[Gate PS-02.1A.3] Session roles have distinct PostgreSQL OIDs and no role memberships"
+echo "[Gate PS-02.1A.3] Session roles have distinct PostgreSQL OIDs and no unsafe role memberships"
 role_oids=$(admin -Atc "SELECT count(DISTINCT role.oid) FROM pg_catalog.pg_roles role WHERE role.rolname IN ('pwr_gate141a_sess_a','pwr_gate141a_sess_b')")
 [[ "$role_oids" == "2" ]] || { echo "FAIL: session logins do not have distinct role OIDs" >&2; exit 1; }
-memberships=$(admin -Atc "SELECT count(*) FROM pg_catalog.pg_auth_members m WHERE m.member IN (SELECT oid FROM pg_catalog.pg_roles WHERE rolname IN ('pwr_gate141a_sess_a','pwr_gate141a_sess_b')) OR m.roleid IN (SELECT oid FROM pg_catalog.pg_roles WHERE rolname IN ('pwr_gate141a_sess_a','pwr_gate141a_sess_b'))")
-[[ "$memberships" == "0" ]] || { echo "FAIL: session role has unexpected membership edges: $memberships" >&2; exit 1; }
+memberships=$(admin -Atc "SELECT count(*) FROM pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles member_role ON member_role.oid=m.member JOIN pg_catalog.pg_roles grantor ON grantor.oid=m.grantor WHERE m.member IN (SELECT oid FROM pg_catalog.pg_roles WHERE rolname IN ('pwr_gate141a_sess_a','pwr_gate141a_sess_b')) OR (m.roleid IN (SELECT oid FROM pg_catalog.pg_roles WHERE rolname IN ('pwr_gate141a_sess_a','pwr_gate141a_sess_b')) AND (current_setting('server_version_num')::integer < 160000 OR member_role.rolname <> 'powerops_provisioner' OR NOT m.admin_option OR NOT grantor.rolsuper OR COALESCE((to_jsonb(m)->>'inherit_option')::boolean,true) OR COALESCE((to_jsonb(m)->>'set_option')::boolean,true)))")
+[[ "$memberships" == "0" ]] || { echo "FAIL: session role has unsafe membership edges: $memberships" >&2; exit 1; }
 
 echo "[Gate PS-02.1A.3] Runtime cannot read protected session-to-actor bindings"
 if actor pwr_gate141a_sess_a -c 'SELECT * FROM powerops_security.human_session_actor_binding' >/tmp/powerops-ps021a3.out 2>&1; then

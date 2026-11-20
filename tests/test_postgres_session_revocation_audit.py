@@ -198,7 +198,7 @@ def test_composition_requires_three_distinct_connection_factories():
     def two():
         return Connection()
 
-    with pytest.raises(ValueError, match="must be separate"):
+    with pytest.raises(ValueError, match="separate factories"):
         build_human_session_revocation_coordinator(
             credential_store=object(),
             provisioner_connection_factory=one,

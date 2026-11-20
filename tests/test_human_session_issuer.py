@@ -37,11 +37,18 @@ def principal() -> AuthenticatedPrincipal:
 class FakeBroker:
     issued: IssuedDatabaseSession
     csr_pem: str = ""
+    retired: list[UUID] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        self.retired = []
 
     def issue_session(self, *, token: str, csr_pem: str) -> IssuedDatabaseSession:
         assert token == "fresh-step-up-token"
         self.csr_pem = csr_pem
         return self.issued
+
+    def retire_session(self, *, session_id: UUID, reason: str) -> None:
+        self.retired.append(session_id)
 
 
 class FakeCredentialStore:
@@ -110,6 +117,7 @@ def test_session_issuer_rejects_broker_identity_mismatch(
     with pytest.raises(BrokerAuthorizationError):
         issuer.create_session(principal=principal(), broker_token="fresh-step-up-token")
     assert store.values == {}
+    assert broker.retired == [broker.issued.session_id]
 
 
 def test_session_issuer_fails_closed_if_customer_store_is_unavailable() -> None:
@@ -117,12 +125,14 @@ def test_session_issuer_fails_closed_if_customer_store_is_unavailable() -> None:
         def store_session(self, **values: object) -> None:
             raise RuntimeError("vault unavailable")
 
+    broker = FakeBroker(issued_session())
     issuer = HumanSessionIssuer(
-        broker=FakeBroker(issued_session()),
+        broker=broker,
         credential_store=UnavailableStore(),
     )
     with pytest.raises(BrokerDependencyUnavailable):
         issuer.create_session(principal=principal(), broker_token="fresh-step-up-token")
+    assert broker.retired == [broker.issued.session_id]
 
 
 

@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import traceback
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
 
 from powerops.human_sessions import HumanSessionPrincipal, HumanSessionRejected
 from powerops.postgres_certificate_connector import (
-    HumanPostgresCredentials,
     PsycopgHumanSessionConnector,
 )
 

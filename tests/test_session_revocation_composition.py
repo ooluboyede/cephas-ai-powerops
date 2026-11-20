@@ -200,6 +200,7 @@ def test_composition_fails_closed_when_factory_authenticates_as_wrong_login():
             expected_provisioner_login="powerops_provisioner",
             expected_termination_login="powerops_termination",
             expected_audit_login="powerops_audit",
+            credential_receipt_verifier=receipt_verifier(store),
         )
 
 

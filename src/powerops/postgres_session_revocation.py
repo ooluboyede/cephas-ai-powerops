@@ -150,15 +150,8 @@ class PsycopgSessionBackendRevocationControl:
             raise SessionRevocationError("A valid exact session UUID is required")
         row = self._execute_committed(
             self._termination_connection_factory,
-            """
-            SELECT count(*)::integer AS remaining_backend_count
-              FROM powerops_security.human_session_backend_registry AS registry
-              JOIN pg_catalog.pg_stat_activity AS activity
-                ON activity.pid = registry.backend_pid
-               AND activity.backend_start = registry.backend_start
-             WHERE registry.session_id = %s
-               AND registry.terminated_at IS NULL
-            """,
+            "SELECT powerops_security.count_human_session_backends(%s) "
+            "AS remaining_backend_count",
             (str(session_id),),
         )
         if isinstance(row, Mapping):

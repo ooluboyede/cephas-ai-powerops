@@ -54,6 +54,12 @@ class FakeCredentialStore:
     def __init__(self, event_log):
         self.event_log = event_log
 
+    def get_session_scope(self, session_id):
+        return (
+            UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+            UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+        )
+
     def revoke_session(self, session_id):
         self.event_log.append(("credential_revoke", session_id))
 
@@ -81,8 +87,8 @@ def test_composed_coordinator_executes_full_verified_revocation_sequence():
     )
     actor = AuthenticatedPrincipal(
         subject="oidc|session-revoker",
-        tenant_id=uuid4(),
-        business_unit_id=uuid4(),
+        tenant_id=UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        business_unit_id=UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
         roles=frozenset({"powerops_session_revoker"}),
         issuer="https://issuer.example",
     )

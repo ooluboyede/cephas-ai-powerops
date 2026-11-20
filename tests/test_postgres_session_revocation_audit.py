@@ -129,8 +129,12 @@ def test_audit_sink_requires_database_confirmation():
 
 
 def test_composition_requires_three_distinct_connection_factories():
-    one = lambda: Connection()
-    two = lambda: Connection()
+    def one():
+        return Connection()
+
+    def two():
+        return Connection()
+
     with pytest.raises(ValueError, match="must be separate"):
         build_human_session_revocation_coordinator(
             credential_store=object(),
@@ -142,9 +146,15 @@ def test_composition_requires_three_distinct_connection_factories():
 
 def test_composition_builds_coordinator_with_injected_credential_store():
     credential_store = object()
-    one = lambda: Connection()
-    two = lambda: Connection()
-    three = lambda: Connection()
+    def one():
+        return Connection()
+
+    def two():
+        return Connection()
+
+    def three():
+        return Connection()
+
     coordinator = build_human_session_revocation_coordinator(
         credential_store=credential_store,
         provisioner_connection_factory=one,

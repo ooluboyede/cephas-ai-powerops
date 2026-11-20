@@ -170,4 +170,4 @@ class PsycopgSessionBackendRevocationControl:
             raise SessionRevocationError(
                 "Customer PostgreSQL returned an invalid backend count"
             )
-        return count
+        return int(count)

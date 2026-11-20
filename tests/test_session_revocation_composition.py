@@ -30,12 +30,18 @@ def principal_row(
         "current_user": login,
         "session_control_member": False,
         "revocation_auditor_member": False,
+        "pg_read_all_stats_member": False,
+        "pg_monitor_member": False,
+        "pg_signal_backend_member": False,
         "can_retire": can_retire,
         "can_terminate": can_terminate,
         "can_count": can_count,
         "can_audit": can_audit,
         "registry_direct_access": False,
+        "session_binding_direct_access": False,
+        "actor_binding_direct_access": False,
         "backend_audit_direct_access": False,
+        "pg_stat_direct_access": False,
         "revocation_audit_direct_access": False,
     }
 

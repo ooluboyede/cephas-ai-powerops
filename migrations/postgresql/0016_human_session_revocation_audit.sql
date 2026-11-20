@@ -36,6 +36,11 @@ END
 $verify_role$;
 
 GRANT USAGE ON SCHEMA powerops_security TO powerops_revocation_auditor;
+-- The audit SECURITY DEFINER owner may call only the narrow, exact-session
+-- verifier; it receives no direct registry or pg_stat_activity access.
+GRANT EXECUTE ON FUNCTION
+    powerops_security.count_human_session_backends(uuid)
+    TO powerops_revocation_auditor;
 
 CREATE TABLE powerops_security.human_session_revocation_audit (
     audit_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

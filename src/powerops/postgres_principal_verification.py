@@ -136,10 +136,6 @@ SELECT pg_catalog.jsonb_build_object(
             session_user,
             'powerops_security.human_session_backend_audit', 'TRUNCATE'
         ),
-    'pg_stat_direct_access',
-        pg_catalog.has_table_privilege(
-            session_user, 'pg_catalog.pg_stat_activity', 'SELECT'
-        ),
     'revocation_audit_direct_access',
         pg_catalog.has_table_privilege(
             session_user,
@@ -218,7 +214,6 @@ def _verify_one(
         "session_binding_direct_access",
         "actor_binding_direct_access",
         "backend_audit_direct_access",
-        "pg_stat_direct_access",
         "revocation_audit_direct_access",
     )
     if (
@@ -250,7 +245,6 @@ def _verify_one(
         or row["session_binding_direct_access"]
         or row["actor_binding_direct_access"]
         or row["backend_audit_direct_access"]
-        or row["pg_stat_direct_access"]
         or row["revocation_audit_direct_access"]
     ):
         raise PostgresPrincipalVerificationError(

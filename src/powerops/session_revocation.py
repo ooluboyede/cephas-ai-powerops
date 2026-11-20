@@ -185,7 +185,7 @@ class HumanSessionRevocationCoordinator:
                     credential_receipt,
                 )
                 raise SessionRevocationError(
-                    "Revocation completed but its audit record could not be confirmed"
+                    "Revocation containment completed, but its audit record could not be confirmed; operation remains incomplete"
                 ) from None
             return SessionRevocationResult(
                 session_id=session_id,

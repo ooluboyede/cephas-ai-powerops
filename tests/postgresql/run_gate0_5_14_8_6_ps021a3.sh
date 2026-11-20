@@ -12,19 +12,28 @@ actor() { local role="$1"; shift; PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -
 echo "[Gate PS-02.1A.3] Apply dedicated per-session login migration"
 admin -f migrations/postgresql/0014_per_session_human_login_identity.sql
 
-echo "[Gate PS-02.1A.3] Provision two concurrent session identities for one actor"
+echo "[Gate PS-02.1A.3] Provision an isolated test actor, then two concurrent session identities"
 admin <<'SQL'
+SELECT powerops_security.provision_human_actor_login(
+ 'pwr_gate141a_actor',
+ 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ 'a1000000-0000-4000-8000-000000000001',
+ 'https://idp.customer.example/tenant-a',
+ 'human-operator-ps021a3',
+ false,
+ pg_catalog.clock_timestamp() + interval '10 minutes'
+);
 SELECT powerops_security.provision_human_session_login(
  'a1400000-0000-4000-8000-000000000001',
  'pwr_gate141a_sess_a',
- 'https://idp.customer.example/tenant-a','human-operator-0144',
+ 'https://idp.customer.example/tenant-a','human-operator-ps021a3',
  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
  'a1000000-0000-4000-8000-000000000001',
  pg_catalog.clock_timestamp() + interval '4 minutes');
 SELECT powerops_security.provision_human_session_login(
  'a1400000-0000-4000-8000-000000000002',
  'pwr_gate141a_sess_b',
- 'https://idp.customer.example/tenant-a','human-operator-0144',
+ 'https://idp.customer.example/tenant-a','human-operator-ps021a3',
  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
  'a1000000-0000-4000-8000-000000000001',
  pg_catalog.clock_timestamp() + interval '4 minutes');
@@ -75,7 +84,7 @@ if admin -c "SELECT powerops_security.provision_human_session_login('a1400000-00
 fi
 
 echo "[Gate PS-02.1A.3] Actor-wide revocation retires every remaining session login"
-admin -c "SELECT powerops_security.revoke_human_actor_login('pwr_gate0144_operator','Gate PS-02.1A.3 actor-wide session revocation test')"
+admin -c "SELECT powerops_security.revoke_human_actor_login('pwr_gate141a_actor','Gate PS-02.1A.3 isolated actor-wide revocation test')"
 role_b_after_actor_revoke=$(admin -Atc "SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname='pwr_gate141a_sess_b'")
 [[ "$role_b_after_actor_revoke" == "f" ]] || {
   echo "FAIL: actor-wide revocation left a session login enabled" >&2; exit 1;

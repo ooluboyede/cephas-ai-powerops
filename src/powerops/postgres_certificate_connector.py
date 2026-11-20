@@ -320,4 +320,21 @@ class PsycopgHumanSessionConnector:
             autocommit=False,
         )
         with cast(AbstractContextManager[Any], connection) as managed_connection:
+            # Register this exact physical backend before exposing any SQL
+            # capability to the application. The function derives PID and
+            # backend_start inside PostgreSQL and serializes against revocation.
+            with managed_connection.transaction():
+                registration = managed_connection.execute(
+                    """
+                    SELECT powerops_security.register_human_session_backend(%s)
+                        AS registered
+                    """,
+                    (str(credentials.session_id),),
+                ).fetchone()
+                if not isinstance(registration, dict) or registration.get("registered") is not True:
+                    raise HumanSessionRejected(
+                        "Customer PostgreSQL session admission was not confirmed"
+                    )
+            # The transaction context has committed registration here.
+            # Any exception/uncertain commit exits without yielding a connection.
             yield managed_connection

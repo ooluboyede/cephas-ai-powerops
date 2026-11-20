@@ -12,6 +12,9 @@ from typing import Protocol
 from uuid import UUID
 
 from powerops.auth import AuthenticatedPrincipal
+from powerops.credential_revocation_attestation import (
+    CredentialRevocationReceiptVerifier,
+)
 from powerops.human_session_issuer import HumanSessionCredentialStore
 
 
@@ -80,10 +83,12 @@ class HumanSessionRevocationCoordinator:
         credential_store: HumanSessionCredentialStore,
         backend_control: SessionBackendRevocationControl,
         audit: SessionRevocationAudit,
+        credential_receipt_verifier: CredentialRevocationReceiptVerifier,
     ) -> None:
         self._credential_store = credential_store
         self._backend_control = backend_control
         self._audit = audit
+        self._credential_receipt_verifier = credential_receipt_verifier
 
     def revoke(
         self, *, actor: AuthenticatedPrincipal, session_id: UUID
@@ -128,10 +133,12 @@ class HumanSessionRevocationCoordinator:
         # Attempt both independent containment controls even if one fails.
         # This minimizes the exposure window during a partial outage.
         try:
-            self._credential_store.revoke_session(session_id)
-            store_revoked = True
+            receipt = self._credential_store.revoke_session(session_id)
+            store_revoked = self._credential_receipt_verifier.verify(
+                receipt, session_id=session_id
+            )
         except Exception:
-            pass
+            store_revoked = False
 
         try:
             self._backend_control.fence_session(session_id)

@@ -183,40 +183,47 @@ ALTER FUNCTION powerops_security.register_human_session_backend(uuid)
 REVOKE ALL ON FUNCTION powerops_security.register_human_session_backend(uuid)
     FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION powerops_security.register_human_session_backend(uuid)
-    TO powerops_provisioner;
+    TO powerops_provisioner WITH GRANT OPTION;
 
--- Grant the registration capability to each newly provisioned session login.
--- The provisioner is the only role allowed to perform this controlled grant.
-CREATE OR REPLACE FUNCTION powerops_security.grant_human_session_backend_registration(
-    p_session_role_name name
-)
-RETURNS void
+-- Grant registration to each dedicated session login as part of the same
+-- transaction that inserts its protected session binding in migration 0014.
+-- The trigger owner is the controlled provisioner; the session role receives
+-- EXECUTE on this one checked SECURITY DEFINER function and no table access.
+CREATE OR REPLACE FUNCTION powerops_security.grant_session_backend_registration()
+RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, powerops_security
 AS $function$
 DECLARE
-    v_binding powerops_security.human_session_actor_binding%ROWTYPE;
+    v_role_oid oid;
 BEGIN
-    SELECT binding.* INTO STRICT v_binding
-      FROM powerops_security.human_session_actor_binding AS binding
-     WHERE binding.session_role_name = p_session_role_name
-       AND binding.active
-       AND binding.expires_at > pg_catalog.clock_timestamp();
+    SELECT role.oid INTO STRICT v_role_oid
+      FROM pg_catalog.pg_roles AS role
+     WHERE role.rolname = NEW.session_role_name
+       AND role.rolcanlogin;
+    IF v_role_oid <> NEW.session_role_oid THEN
+        RAISE EXCEPTION 'session role identity changed during registration grant'
+            USING ERRCODE = '42501';
+    END IF;
 
     EXECUTE pg_catalog.format(
         'GRANT EXECUTE ON FUNCTION powerops_security.register_human_session_backend(uuid) TO %I',
-        p_session_role_name
+        NEW.session_role_name
     );
+    RETURN NEW;
 END
 $function$;
 
-ALTER FUNCTION powerops_security.grant_human_session_backend_registration(name)
+ALTER FUNCTION powerops_security.grant_session_backend_registration()
     OWNER TO powerops_provisioner;
-REVOKE ALL ON FUNCTION powerops_security.grant_human_session_backend_registration(name)
+REVOKE ALL ON FUNCTION powerops_security.grant_session_backend_registration()
     FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION powerops_security.grant_human_session_backend_registration(name)
-    TO powerops_provisioner;
+
+CREATE TRIGGER human_session_backend_registration_grant
+AFTER INSERT ON powerops_security.human_session_actor_binding
+FOR EACH ROW
+EXECUTE FUNCTION powerops_security.grant_session_backend_registration();
 
 -- Control-plane termination is deliberately separate from session retirement.
 -- The caller must first commit retire_human_session_login(session_id, reason),
@@ -252,11 +259,7 @@ BEGIN
      WHERE binding.session_id = p_session_id
      FOR UPDATE;
 
-    IF v_binding.active OR v_binding.expires_at > pg_catalog.clock_timestamp()
-       AND EXISTS (
-           SELECT 1 FROM powerops_security.human_session_actor_binding AS active_binding
-            WHERE active_binding.session_id = p_session_id AND active_binding.active
-       ) THEN
+    IF v_binding.active THEN
         RAISE EXCEPTION 'session must be fenced before backend termination'
             USING ERRCODE = '55000';
     END IF;

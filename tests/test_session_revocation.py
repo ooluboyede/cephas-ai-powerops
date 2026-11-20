@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from base64 import b64encode
+from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -284,3 +285,27 @@ def test_global_revoker_can_revoke_out_of_scope_session():
 
     assert result.verified is True
     assert session_id in store.revoked
+
+
+
+def test_unverified_receipt_keeps_database_session_contained_but_fails_closed():
+    session_id = uuid4()
+
+    class WrongSessionReceiptStore(Store):
+        def revoke_session(self, exact_session_id):
+            receipt = super().revoke_session(exact_session_id)
+            return replace(receipt, session_id=uuid4())
+
+    store = WrongSessionReceiptStore()
+    backend = BackendControl({session_id})
+    audit = Audit()
+
+    with pytest.raises(SessionRevocationError, match="incomplete"):
+        coordinator(store, backend, audit).revoke(
+            actor=principal(), session_id=session_id
+        )
+
+    assert session_id in backend.fenced
+    assert session_id not in backend.active
+    assert audit.events[-1]["credential_revoked"] is False
+    assert audit.events[-1]["credential_receipt"] is not None

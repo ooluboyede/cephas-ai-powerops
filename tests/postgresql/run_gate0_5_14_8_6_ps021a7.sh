@@ -75,25 +75,11 @@ SELECT powerops_security.record_human_session_revocation_audit(
 );
 SQL
 
-psql "$POWEROPS_TEST_ADMIN_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
-  -v session_id="$SESSION_ID" <<'SQL'
-DO $$
-DECLARE
-    v_count integer;
-BEGIN
-    SELECT count(*)::integer INTO v_count
-      FROM powerops_security.human_session_revocation_audit
-     WHERE session_id = :'session_id'::uuid
-       AND event_type = 'human_database_session_revoked'
-       AND outcome = 'verified'
-       AND credential_revoked
-       AND admission_fenced
-       AND backend_termination_verified;
-    IF v_count <> 1 THEN
-        RAISE EXCEPTION 'append-only audit record was not persisted exactly once';
-    END IF;
-END
-$$;
-SQL
+AUDIT_ROWS="$(psql "$POWEROPS_TEST_ADMIN_DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
+  -c "SELECT count(*) FROM powerops_security.human_session_revocation_audit WHERE session_id = '$SESSION_ID'::uuid AND event_type = 'human_database_session_revoked' AND outcome = 'verified' AND credential_revoked AND admission_fenced AND backend_termination_verified")"
+if [[ "$AUDIT_ROWS" != "1" ]]; then
+  echo "Expected exactly one verified append-only audit row; got: $AUDIT_ROWS" >&2
+  exit 1
+fi
 
 echo "PS-02.1A.7 audit migration and least-privilege integration checks completed."

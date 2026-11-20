@@ -2,9 +2,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import json
 from typing import Any
 from uuid import UUID
 
+from powerops.credential_revocation_attestation import (
+    CredentialRevocationReceipt,
+    canonical_receipt_payload,
+)
 from powerops.session_revocation import SessionRevocationError
 
 
@@ -34,6 +39,7 @@ class PostgresSessionRevocationAudit:
         credential_revoked: bool,
         admission_fenced: bool,
         backend_termination_verified: bool,
+        credential_receipt: CredentialRevocationReceipt | None,
     ) -> None:
         if (
             not isinstance(event_type, str)
@@ -66,6 +72,25 @@ class PostgresSessionRevocationAudit:
         ):
             raise SessionRevocationError("Verified audit outcome contradicts containment state")
 
+        if credential_receipt is not None:
+            try:
+                receipt_payload = json.loads(
+                    canonical_receipt_payload(credential_receipt).decode("ascii")
+                )
+                receipt_signature = credential_receipt.signature_b64
+            except (TypeError, ValueError, UnicodeError):
+                raise SessionRevocationError(
+                    "Invalid credential revocation receipt evidence"
+                ) from None
+        else:
+            receipt_payload = None
+            receipt_signature = None
+
+        if outcome == "verified" and (receipt_payload is None or receipt_signature is None):
+            raise SessionRevocationError(
+                "Verified audit outcome requires signed credential receipt evidence"
+            )
+
         connection = None
         try:
             connection = self._connection_factory()
@@ -74,7 +99,7 @@ class PostgresSessionRevocationAudit:
                 cursor.execute(
                     """
                     SELECT powerops_security.record_human_session_revocation_audit(
-                        %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                     """,
                     (
@@ -86,6 +111,8 @@ class PostgresSessionRevocationAudit:
                         credential_revoked,
                         admission_fenced,
                         backend_termination_verified,
+                        receipt_payload,
+                        receipt_signature,
                     ),
                 )
                 row = cursor.fetchone()

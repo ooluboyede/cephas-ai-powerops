@@ -69,9 +69,7 @@ ALTER TABLE powerops_security.human_session_revocation_audit
 REVOKE ALL ON powerops_security.human_session_revocation_audit FROM PUBLIC;
 
 -- Remove the previous boolean-only function contract on an in-place upgrade.
-REVOKE ALL ON FUNCTION powerops_security.record_human_session_revocation_audit(
-    text, text, uuid, text, integer, boolean, boolean, boolean
-) FROM PUBLIC;
+-- DROP FUNCTION removes any prior grants as well as the obsolete overload.
 DROP FUNCTION IF EXISTS powerops_security.record_human_session_revocation_audit(
     text, text, uuid, text, integer, boolean, boolean, boolean
 );

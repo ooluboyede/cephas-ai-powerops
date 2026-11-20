@@ -100,7 +100,7 @@ def verify_all(*, provisioner=None, termination=None, audit=None, **expected):
         provisioner_connection_factory=provisioner or factory(PROVISIONER),
         termination_connection_factory=termination or factory(TERMINATION),
         audit_connection_factory=audit or factory(AUDIT),
-        **(expected or EXPECTED),
+        **{**EXPECTED, **expected},
     )
 
 
@@ -140,6 +140,7 @@ try:
     admin.execute(
         "GRANT pwr_gate_ps021a8_unexpected TO pwr_gate_ps021a8_provisioner"
     )
+    admin.commit()
     try:
         verify_all(provisioner=set_role_factory)
     except PostgresPrincipalVerificationError:
@@ -149,11 +150,13 @@ try:
     admin.execute(
         "REVOKE pwr_gate_ps021a8_unexpected FROM pwr_gate_ps021a8_provisioner"
     )
+    admin.commit()
 
     admin.execute(
         "GRANT SELECT ON powerops_security.human_session_actor_binding "
         "TO pwr_gate_ps021a8_termination"
     )
+    admin.commit()
     try:
         verify_all()
     except PostgresPrincipalVerificationError:
@@ -164,8 +167,10 @@ try:
         "REVOKE SELECT ON powerops_security.human_session_actor_binding "
         "FROM pwr_gate_ps021a8_termination"
     )
+    admin.commit()
 
     admin.execute("GRANT pg_read_all_stats TO pwr_gate_ps021a8_audit")
+    admin.commit()
     try:
         verify_all()
     except PostgresPrincipalVerificationError:
@@ -173,6 +178,7 @@ try:
     else:
         raise AssertionError("elevated pg_stat visibility was accepted")
     admin.execute("REVOKE pg_read_all_stats FROM pwr_gate_ps021a8_audit")
+    admin.commit()
 
     admin.execute(
         "GRANT EXECUTE ON FUNCTION "
@@ -180,6 +186,7 @@ try:
         "text,text,uuid,text,integer,boolean,boolean,boolean,jsonb,text) "
         "TO pwr_gate_ps021a8_termination"
     )
+    admin.commit()
     try:
         verify_all()
     except PostgresPrincipalVerificationError:

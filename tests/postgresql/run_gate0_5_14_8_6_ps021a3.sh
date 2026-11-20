@@ -44,7 +44,7 @@ SQL
 echo "[Gate PS-02.1A.3] Both independent logins resolve to the same DB-authoritative actor entitlements"
 for role in pwr_gate141a_sess_a pwr_gate141a_sess_b; do
   resolved=$(actor "$role" -Atc "SELECT session_user || ':' || actor_subject || ':' || finance_operator || ':' || finance_verifier FROM powerops_security.resolve_authenticated_human_actor_v2()")
-  [[ "$resolved" == "$role:https://idp.customer.example/tenant-a|human-operator-0144:true:false" ]] || {
+  [[ "$resolved" == "$role:https://idp.customer.example/tenant-a|human-operator-ps021a3:true:false" ]] || {
     echo "FAIL: per-session actor mapping mismatch for $role: $resolved" >&2; exit 1;
   }
 done
@@ -68,7 +68,7 @@ role_b_login=$(admin -Atc "SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rol
   echo "FAIL: exact retirement changed wrong login states: A=$role_a_login B=$role_b_login" >&2; exit 1;
 }
 remaining=$(actor pwr_gate141a_sess_b -Atc "SELECT actor_subject FROM powerops_security.resolve_authenticated_human_actor_v2()")
-[[ "$remaining" == "https://idp.customer.example/tenant-a|human-operator-0144" ]] || {
+[[ "$remaining" == "https://idp.customer.example/tenant-a|human-operator-ps021a3" ]] || {
   echo "FAIL: unrelated session stopped resolving after exact retirement: $remaining" >&2; exit 1;
 }
 
@@ -76,10 +76,10 @@ echo "[Gate PS-02.1A.3] Continue into the dependent PS-02.1A.5 backend registry 
 bash tests/postgresql/run_gate0_5_14_8_6_ps021a5.sh
 
 echo "[Gate PS-02.1A.3] Session role name and UUID tombstones prevent reuse"
-if admin -c "SELECT powerops_security.provision_human_session_login('a1400000-0000-4000-8000-000000000001','pwr_gate141a_reuse','https://idp.customer.example/tenant-a','human-operator-0144','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','a1000000-0000-4000-8000-000000000001',pg_catalog.clock_timestamp()+interval '2 minutes')" >/tmp/powerops-ps021a3-reuse.out 2>&1; then
+if admin -c "SELECT powerops_security.provision_human_session_login('a1400000-0000-4000-8000-000000000001','pwr_gate141a_reuse','https://idp.customer.example/tenant-a','human-operator-ps021a3','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','a1000000-0000-4000-8000-000000000001',pg_catalog.clock_timestamp()+interval '2 minutes')" >/tmp/powerops-ps021a3-reuse.out 2>&1; then
   echo "FAIL: retired session UUID was reused" >&2; exit 1
 fi
-if admin -c "SELECT powerops_security.provision_human_session_login('a1400000-0000-4000-8000-000000000003','pwr_gate141a_sess_a','https://idp.customer.example/tenant-a','human-operator-0144','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','a1000000-0000-4000-8000-000000000001',pg_catalog.clock_timestamp()+interval '2 minutes')" >/tmp/powerops-ps021a3-role-reuse.out 2>&1; then
+if admin -c "SELECT powerops_security.provision_human_session_login('a1400000-0000-4000-8000-000000000003','pwr_gate141a_sess_a','https://idp.customer.example/tenant-a','human-operator-ps021a3','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','a1000000-0000-4000-8000-000000000001',pg_catalog.clock_timestamp()+interval '2 minutes')" >/tmp/powerops-ps021a3-role-reuse.out 2>&1; then
   echo "FAIL: existing session role name was reused" >&2; exit 1
 fi
 

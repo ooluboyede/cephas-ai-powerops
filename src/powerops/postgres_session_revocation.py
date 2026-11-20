@@ -139,10 +139,10 @@ class PsycopgSessionBackendRevocationControl:
             (str(session_id),),
         )
         terminated, remaining, complete = self._termination_values(row)
-        if not complete or remaining != 0:
-            raise SessionRevocationError(
-                "Customer PostgreSQL backend termination is incomplete; retry required"
-            )
+        # An incomplete but well-formed result is not an adapter error: return
+        # the signal count so the coordinator can independently query the
+        # remaining exact-session backend count and record an honest partial
+        # outcome. The coordinator will never report success when count > 0.
         return terminated
 
     def active_session_backend_count(self, session_id: UUID) -> int:

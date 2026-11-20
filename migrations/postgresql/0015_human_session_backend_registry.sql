@@ -93,6 +93,35 @@ GRANT SELECT ON powerops_security.cluster_identity,
                 powerops_security.human_actor_binding,
                 powerops_security.role_scope_binding
     TO powerops_session_control;
+-- PostgreSQL requires UPDATE privilege on at least one column for
+-- SELECT ... FOR SHARE. The NOLOGIN SECURITY DEFINER owner receives only
+-- column-level UPDATE on the active fence bit; session logins receive none.
+GRANT UPDATE (active)
+    ON powerops_security.human_session_actor_binding
+    TO powerops_session_control;
+
+DO $verify_session_binding_lock_privilege$
+BEGIN
+    IF NOT pg_catalog.has_column_privilege(
+        'powerops_session_control',
+        'powerops_security.human_session_actor_binding',
+        'active',
+        'UPDATE'
+    ) OR pg_catalog.has_column_privilege(
+        'powerops_session_control',
+        'powerops_security.human_session_actor_binding',
+        'subject',
+        'UPDATE'
+    ) OR pg_catalog.has_table_privilege(
+        'powerops_session_control',
+        'powerops_security.human_session_actor_binding',
+        'UPDATE'
+    ) THEN
+        RAISE EXCEPTION
+            'session-control lock privilege must be limited to the active column';
+    END IF;
+END
+$verify_session_binding_lock_privilege$;
 
 CREATE TABLE powerops_security.human_session_backend_registry (
     session_id uuid NOT NULL

@@ -154,6 +154,101 @@ GRANT EXECUTE ON FUNCTION powerops_security.provision_human_session_login(
     uuid, name, text, text, uuid, uuid, timestamptz
 ) TO powerops_provisioner;
 
+-- Session expiry/revocation and actor-wide revocation must also fence the
+-- lower-level scope resolver used by RLS, not merely finance-specific APIs.
+CREATE OR REPLACE FUNCTION powerops_security.resolve_authenticated_scope()
+RETURNS TABLE (
+    cluster_id uuid,
+    tenant_id uuid,
+    scope_kind text,
+    business_unit_id uuid,
+    authenticated_role_oid oid
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, powerops_security
+AS $function$
+DECLARE
+    v_cluster_id uuid;
+    v_role_oid oid;
+    v_role_name name;
+    v_binding powerops_security.role_scope_binding%ROWTYPE;
+    v_session powerops_security.human_session_actor_binding%ROWTYPE;
+    v_actor powerops_security.human_actor_binding%ROWTYPE;
+    v_retired boolean;
+BEGIN
+    v_role_name := session_user;
+    SELECT role.oid INTO STRICT v_role_oid
+      FROM pg_catalog.pg_roles AS role
+     WHERE role.rolname = session_user AND role.rolcanlogin;
+
+    SELECT ci.cluster_id INTO STRICT v_cluster_id
+      FROM powerops_security.cluster_identity AS ci
+     WHERE ci.singleton;
+
+    SELECT session_binding.* INTO v_session
+      FROM powerops_security.human_session_actor_binding AS session_binding
+     WHERE session_binding.cluster_id = v_cluster_id
+       AND session_binding.session_role_oid = v_role_oid;
+
+    IF FOUND THEN
+        IF NOT v_session.active
+           OR v_session.expires_at <= pg_catalog.clock_timestamp() THEN
+            RAISE EXCEPTION 'human database session is revoked or expired'
+                USING ERRCODE = '42501';
+        END IF;
+
+        SELECT actor.* INTO STRICT v_actor
+          FROM powerops_security.human_actor_binding AS actor
+         WHERE actor.cluster_id = v_session.cluster_id
+           AND actor.role_oid = v_session.actor_role_oid
+           AND actor.issuer = v_session.issuer
+           AND actor.subject = v_session.subject
+           AND actor.tenant_id = v_session.tenant_id
+           AND actor.business_unit_id = v_session.business_unit_id
+           AND actor.active
+           AND (actor.expires_at IS NULL
+                OR actor.expires_at > pg_catalog.clock_timestamp());
+    END IF;
+
+    SELECT EXISTS (
+        SELECT 1 FROM powerops_security.retired_role_identity AS retired
+         WHERE retired.cluster_id = v_cluster_id
+           AND (retired.role_oid = v_role_oid OR retired.role_name = v_role_name)
+    ) INTO v_retired;
+    IF v_retired THEN
+        RAISE EXCEPTION 'authenticated database identity is retired'
+            USING ERRCODE = '42501';
+    END IF;
+
+    SELECT binding.* INTO STRICT v_binding
+      FROM powerops_security.role_scope_binding AS binding
+     WHERE binding.cluster_id = v_cluster_id
+       AND binding.role_oid = v_role_oid
+       AND binding.role_name = v_role_name
+       AND binding.active;
+
+    IF FOUND AND v_session.session_id IS NOT NULL
+       AND (v_binding.tenant_id <> v_session.tenant_id
+            OR v_binding.business_unit_id <> v_session.business_unit_id
+            OR v_binding.scope_kind <> 'business_unit') THEN
+        RAISE EXCEPTION 'session login scope does not match its protected actor binding'
+            USING ERRCODE = '42501';
+    END IF;
+
+    RETURN QUERY SELECT v_cluster_id, v_binding.tenant_id,
+        v_binding.scope_kind, v_binding.business_unit_id, v_role_oid;
+EXCEPTION
+    WHEN NO_DATA_FOUND OR TOO_MANY_ROWS THEN
+        RAISE EXCEPTION 'authenticated database identity has no unique active scope'
+            USING ERRCODE = '42501';
+END
+$function$;
+
+ALTER FUNCTION powerops_security.resolve_authenticated_scope()
+    OWNER TO powerops_scope_resolver;
+REVOKE ALL ON FUNCTION powerops_security.resolve_authenticated_scope() FROM PUBLIC;
+
 -- Resolve session login -> immutable actor binding -> current actor entitlements.
 -- Preserve legacy directly provisioned human logins for backward compatibility;
 -- a role with a session binding never falls back if that binding is inactive.

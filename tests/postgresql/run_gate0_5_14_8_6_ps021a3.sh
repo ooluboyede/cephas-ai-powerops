@@ -14,12 +14,13 @@ admin -f migrations/postgresql/0014_per_session_human_login_identity.sql
 
 echo "[Gate PS-02.1A.3] Provision an isolated test actor, then two concurrent session identities"
 admin <<'SQL'
-SELECT powerops_security.provision_human_actor_login(
+SELECT powerops_security.provision_human_actor_login_v2(
  'pwr_gate141a_actor',
  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
  'a1000000-0000-4000-8000-000000000001',
  'https://idp.customer.example/tenant-a',
  'human-operator-ps021a3',
+ true,
  false,
  pg_catalog.clock_timestamp() + interval '10 minutes'
 );

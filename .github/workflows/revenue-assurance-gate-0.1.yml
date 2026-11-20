@@ -125,6 +125,9 @@ jobs:
       - name: Run Gate PS-02.1A.8 live PostgreSQL principal separation
         run: bash tests/postgresql/run_gate0_5_14_8_6_ps021a8.sh
 
+      - name: Run Gate PS-02.1A.9 revocation-first registration race
+        run: bash tests/postgresql/run_gate0_5_14_8_6_ps021a9.sh
+
       # Migration 0013 remains incompatible with the dedicated session-role model
       # and is intentionally not applied. PS-02.1A.5 uses additive migration 0015,
       # with exact-session registration/revocation tests on PostgreSQL 14–17.

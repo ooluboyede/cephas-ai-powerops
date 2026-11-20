@@ -334,6 +334,17 @@ class DatabaseSessionBroker:
         )
         return public_key, hashlib.sha256(public_der).hexdigest()
 
+    def retire_session(self, *, session_id: UUID, reason: str) -> None:
+        """Retire the exact provisioned login after downstream issuance failure."""
+        try:
+            self._session_provisioner.retire_session(
+                session_id=session_id, reason=reason
+            )
+        except Exception:
+            raise BrokerDependencyUnavailable(
+                "Customer database could not confirm exact-session retirement"
+            ) from None
+
     def issue_session(
         self, *, token: str, csr_pem: str, now: datetime | None = None
     ) -> IssuedDatabaseSession:

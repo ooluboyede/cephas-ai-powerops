@@ -16,9 +16,15 @@ echo "[Gate PS-02.1A.5] Apply per-session backend registry after migration 0014"
 admin -f migrations/postgresql/0015_human_session_backend_registry.sql
 
 echo "[Gate PS-02.1A.5] Register two distinct live physical backends for one session"
-actor "$ROLE_B" -c "SELECT powerops_security.register_human_session_backend('$SESSION_B'); SELECT pg_catalog.pg_sleep(30)" >/tmp/powerops-ps021a5-backend-a.out 2>&1 &
+actor "$ROLE_B" >/tmp/powerops-ps021a5-backend-a.out 2>&1 <<SQL &
+SELECT powerops_security.register_human_session_backend('$SESSION_B');
+SELECT pg_catalog.pg_sleep(30);
+SQL
 backend_a=$!
-actor "$ROLE_B" -c "SELECT powerops_security.register_human_session_backend('$SESSION_B'); SELECT pg_catalog.pg_sleep(30)" >/tmp/powerops-ps021a5-backend-b.out 2>&1 &
+actor "$ROLE_B" >/tmp/powerops-ps021a5-backend-b.out 2>&1 <<SQL &
+SELECT powerops_security.register_human_session_backend('$SESSION_B');
+SELECT pg_catalog.pg_sleep(30);
+SQL
 backend_b=$!
 
 registered=0

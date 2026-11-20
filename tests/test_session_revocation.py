@@ -15,6 +15,16 @@ class Store:
     def __init__(self):
         self.revoked = set()
         self.fail = False
+        self.scopes = {}
+
+    def get_session_scope(self, session_id):
+        return self.scopes.get(
+            session_id,
+            (
+                UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+                UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+            ),
+        )
 
     def revoke_session(self, session_id):
         if self.fail:
@@ -60,8 +70,8 @@ class Audit:
 def principal(*, authorized=True):
     return AuthenticatedPrincipal(
         subject="security.operator",
-        tenant_id=uuid4(),
-        business_unit_id=uuid4(),
+        tenant_id=UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        business_unit_id=UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
         roles=frozenset(
             {"powerops_session_revoker"} if authorized else {"finance_verifier"}
         ),
@@ -200,3 +210,41 @@ def test_audit_failure_does_not_report_revocation_success():
         )
 
     assert session_id not in backend.active
+
+
+
+def test_scoped_revoker_cannot_revoke_another_tenant_or_business_unit():
+    session_id = uuid4()
+    store = Store()
+    store.scopes[session_id] = (
+        UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
+        UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+    )
+    backend, audit = BackendControl({session_id}), Audit()
+
+    with pytest.raises(SessionRevocationError, match="not authorized"):
+        coordinator(store, backend, audit).revoke(
+            actor=principal(), session_id=session_id
+        )
+
+    assert not store.revoked
+    assert not backend.fenced
+    assert not backend.events
+
+
+def test_global_revoker_can_revoke_out_of_scope_session():
+    session_id = uuid4()
+    actor = AuthenticatedPrincipal(
+        subject="global.security.operator",
+        tenant_id=uuid4(),
+        business_unit_id=uuid4(),
+        roles=frozenset({"powerops_global_session_revoker"}),
+        issuer="https://identity.customer.example",
+    )
+    store, backend, audit = Store(), BackendControl({session_id}), Audit()
+    result = coordinator(store, backend, audit).revoke(
+        actor=actor, session_id=session_id
+    )
+
+    assert result.verified is True
+    assert session_id in store.revoked

@@ -4,6 +4,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from powerops.credential_revocation_attestation import (
+    CredentialRevocationReceiptVerifier,
+)
 from powerops.human_session_issuer import HumanSessionCredentialStore
 from powerops.postgres_principal_verification import (
     verify_revocation_postgres_principals,
@@ -27,6 +30,7 @@ def build_human_session_revocation_coordinator(
     expected_provisioner_login: str,
     expected_termination_login: str,
     expected_audit_login: str,
+    credential_receipt_verifier: CredentialRevocationReceiptVerifier,
 ) -> HumanSessionRevocationCoordinator:
     """Verify actual PostgreSQL identities before composing revocation.
 
@@ -66,4 +70,5 @@ def build_human_session_revocation_coordinator(
         credential_store=credential_store,
         backend_control=backend_control,
         audit=audit,
+        credential_receipt_verifier=credential_receipt_verifier,
     )

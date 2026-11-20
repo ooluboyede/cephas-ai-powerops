@@ -111,13 +111,13 @@ jobs:
       - name: Run Gate 0.5.14.5 database-derived finance actors
         run: bash tests/postgresql/run_gate0_5_14_5.sh
 
-      - name: Run Gate PS-02.1A.3 per-session PostgreSQL login identities
+      - name: Run Gate PS-02.1A.3 and PS-02.1A.5 per-session identity and backend registry tests
         run: bash tests/postgresql/run_gate0_5_14_8_6_ps021a3.sh
 
-      # PS-02.1A: migration 0013 is an unaccepted implementation attempt.
-      # Do not apply it in CI or customer databases. Re-enable the exact-session
-      # registry only after a corrected per-session login-role migration and
-      # its PostgreSQL 14–17 adversarial tests are reviewed.
+      # Migration 0013 remains incompatible with the dedicated session-role model
+      # and is intentionally not applied. PS-02.1A.5 uses additive migration 0015,
+      # with exact-session registration/revocation tests on PostgreSQL 14–17.
+      # Backend-control privileges still require customer DBA approval.
       - name: Run PostgreSQL repository integration tests
         env:
           POWEROPS_TEST_DATABASE_URL: postgresql://pwr_gate1e_bu_a1:Gate1E-Disposable-Only-ChangeMe@127.0.0.1:5432/postgres

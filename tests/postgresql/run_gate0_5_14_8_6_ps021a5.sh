@@ -60,17 +60,19 @@ admin -c "SELECT powerops_security.retire_human_session_login('$SESSION_B','Gate
 
 echo "[Gate PS-02.1A.5] Terminate only exact PID + backend_start matches; retry until verified"
 complete=f
+total_terminated=0
 for attempt in $(seq 1 20); do
   result=$(admin -At -F '|' -c "SELECT terminated_backend_count, remaining_backend_count, complete FROM powerops_security.terminate_human_session_backends('$SESSION_B')")
   terminated="${result%%|*}"
+  total_terminated=$((total_terminated + terminated))
   remainder="${result#*|}"
   remaining="${remainder%%|*}"
   complete="${result##*|}"
   [[ "$complete" == "t" ]] && break
   sleep 0.25
 done
-[[ "$complete" == "t" && "$terminated" == "2" && "$remaining" == "0" ]] || {
-  echo "FAIL: exact backend termination did not verify two live backend terminations" >&2
+[[ "$complete" == "t" && "$total_terminated" == "2" && "$remaining" == "0" ]] || {
+  echo "FAIL: exact backend termination did not verify two live backend terminations (signalled=$total_terminated remaining=$remaining last_result=$result)" >&2
   kill "$backend_a" "$backend_b" 2>/dev/null || true
   exit 1
 }

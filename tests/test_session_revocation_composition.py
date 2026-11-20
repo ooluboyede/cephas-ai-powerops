@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+from base64 import b64encode
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from powerops.auth import AuthenticatedPrincipal
+from powerops.credential_revocation_attestation import (
+    CredentialRevocationReceipt,
+    Ed25519CredentialRevocationReceiptVerifier,
+    canonical_receipt_payload,
+)
 from powerops.postgres_principal_verification import (
     PostgresPrincipalVerificationError,
 )
@@ -78,6 +87,7 @@ class FakeConnection:
 class FakeCredentialStore:
     def __init__(self, event_log):
         self.event_log = event_log
+        self.signing_key = Ed25519PrivateKey.generate()
 
     def get_session_scope(self, session_id):
         return (
@@ -87,6 +97,32 @@ class FakeCredentialStore:
 
     def revoke_session(self, session_id):
         self.event_log.append(("credential_revoke", session_id))
+        receipt = CredentialRevocationReceipt(
+            session_id=session_id,
+            issuer="https://vault.customer.example",
+            key_id="vault-key-2026-01",
+            revoked_at=datetime.now(UTC),
+            outcome="revoked",
+            signature_b64="AA==",
+        )
+        signature = self.signing_key.sign(canonical_receipt_payload(receipt))
+        return CredentialRevocationReceipt(
+            session_id=receipt.session_id,
+            issuer=receipt.issuer,
+            key_id=receipt.key_id,
+            revoked_at=receipt.revoked_at,
+            outcome=receipt.outcome,
+            signature_b64=b64encode(signature).decode("ascii"),
+        )
+
+
+def receipt_verifier(store):
+    public_key = store.signing_key.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw
+    )
+    return Ed25519CredentialRevocationReceiptVerifier(
+        trusted_keys={("https://vault.customer.example", "vault-key-2026-01"): public_key}
+    )
 
 
 def test_composed_coordinator_verifies_actual_principals_before_revocation():
@@ -117,14 +153,16 @@ def test_composed_coordinator_verifies_actual_principals_before_revocation():
         row = principal_row("powerops_audit", can_audit=True) if calls["audit"] == 1 else (101,)
         return FakeConnection(events, row)
 
+    store = FakeCredentialStore(events)
     coordinator = build_human_session_revocation_coordinator(
-        credential_store=FakeCredentialStore(events),
+        credential_store=store,
         provisioner_connection_factory=provisioner_factory,
         termination_connection_factory=termination_factory,
         audit_connection_factory=audit_factory,
         expected_provisioner_login="powerops_provisioner",
         expected_termination_login="powerops_termination",
         expected_audit_login="powerops_audit",
+        credential_receipt_verifier=receipt_verifier(store),
     )
     actor = AuthenticatedPrincipal(
         subject="oidc|session-revoker",
@@ -150,9 +188,10 @@ def test_composition_fails_closed_when_factory_authenticates_as_wrong_login():
     def factory(login, **privileges):
         return lambda: FakeConnection(events, principal_row(login, **privileges))
 
+    store = FakeCredentialStore(events)
     with pytest.raises(PostgresPrincipalVerificationError):
         build_human_session_revocation_coordinator(
-            credential_store=FakeCredentialStore(events),
+            credential_store=store,
             provisioner_connection_factory=factory("unexpected_role", can_retire=True),
             termination_connection_factory=factory(
                 "powerops_termination", can_terminate=True, can_count=True
@@ -172,9 +211,10 @@ def test_composition_fails_closed_when_audit_role_has_direct_table_access():
         row["revocation_audit_direct_access"] = direct
         return lambda: FakeConnection(events, row)
 
+    store = FakeCredentialStore(events)
     with pytest.raises(PostgresPrincipalVerificationError):
         build_human_session_revocation_coordinator(
-            credential_store=FakeCredentialStore(events),
+            credential_store=store,
             provisioner_connection_factory=factory(
                 "powerops_provisioner", can_retire=True
             ),

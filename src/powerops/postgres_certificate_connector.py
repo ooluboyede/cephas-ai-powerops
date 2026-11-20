@@ -263,10 +263,20 @@ class PsycopgHumanSessionConnector:
             materialized = self._credential_provider.materialize_credentials(principal)
             with materialized as credentials:
                 yield from self._connect_with_credentials(principal, credentials)
+        except HumanSessionRejected as exc:
+            # Preserve locally generated, already-sanitized policy errors.
+            # A translated provider rejection may still carry a sensitive cause
+            # or unsuppressed context, which must not cross this boundary.
+            if exc.__cause__ is None and (
+                exc.__context__ is None or exc.__suppress_context__
+            ):
+                raise
+            raise HumanSessionRejected(
+                "Customer human-session credentials are unavailable"
+            ) from None
         except Exception:
-            # This is the public connector boundary. Even an already-translated
-            # HumanSessionRejected may have been raised with a provider exception
-            # as its cause; never preserve that chain across this boundary.
+            # Provider and driver exceptions can contain paths, DSNs, or
+            # provider diagnostics. Never expose them at the public boundary.
             raise HumanSessionRejected(
                 "Customer human-session credentials are unavailable"
             ) from None

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
@@ -122,6 +123,19 @@ class IdentityDirectory(Protocol):
         self, issuer: str, subject: str, tenant_id: UUID, business_unit_id: UUID
     ) -> DatabasePrincipal | None:
         """Resolve an active, pre-provisioned human database identity."""
+
+
+class HumanSessionRoleProvisioner(Protocol):
+    """Customer DB control-plane adapter for migration 0014."""
+
+    def provision_session(
+        self, *, session_id: UUID, role_name: str, issuer: str, subject: str,
+        tenant_id: UUID, business_unit_id: UUID, expires_at: datetime,
+    ) -> int:
+        """Provision and commit one exact session login; return its role OID."""
+
+    def retire_session(self, *, session_id: UUID, reason: str) -> None:
+        """Idempotently retire only the exact session UUID."""
 
 
 class AtomicReplayGuard(Protocol):
@@ -274,12 +288,24 @@ class DatabaseSessionBroker:
         directory: IdentityDirectory,
         replay_guard: AtomicReplayGuard,
         certificate_issuer: CustomerCertificateIssuer,
+        session_provisioner: HumanSessionRoleProvisioner,
     ) -> None:
         self._policy = policy
         self._token_verifier = token_verifier
         self._directory = directory
         self._replay_guard = replay_guard
         self._certificate_issuer = certificate_issuer
+        self._session_provisioner = session_provisioner
+
+    def _retire_failed_issuance(self, session_id: UUID) -> None:
+        try:
+            self._session_provisioner.retire_session(
+                session_id=session_id, reason="broker_issuance_failed"
+            )
+        except Exception:
+            raise BrokerDependencyUnavailable(
+                "Session issuance failed and exact-session retirement could not be confirmed"
+            ) from None
 
     @staticmethod
     def _validated_csr(csr_pem: str) -> tuple[PublicKeyTypes, str]:
@@ -370,9 +396,27 @@ class DatabaseSessionBroker:
         if not consumed:
             raise BrokerReplayError("Broker token identifier has already been consumed")
 
+        session_id = uuid4()
+        session_role = "pwr_" + secrets.token_hex(12)
+        try:
+            role_oid = self._session_provisioner.provision_session(
+                session_id=session_id, role_name=session_role,
+                issuer=principal.issuer, subject=principal.subject,
+                tenant_id=principal.tenant_id,
+                business_unit_id=principal.business_unit_id,
+                expires_at=certificate_expiry,
+            )
+            if isinstance(role_oid, bool) or not isinstance(role_oid, int) or role_oid <= 0:
+                raise ValueError("invalid provisioned role identity")
+        except Exception:
+            self._retire_failed_issuance(session_id)
+            raise BrokerDependencyUnavailable(
+                "Customer database could not confirm per-session role provisioning"
+            ) from None
+
         try:
             certificate_pem = self._certificate_issuer.issue(
-                database_role=database_principal.database_role,
+                database_role=session_role,
                 issuer=principal.issuer,
                 subject=principal.subject,
                 tenant_id=principal.tenant_id,
@@ -381,11 +425,13 @@ class DatabaseSessionBroker:
                 expires_at=certificate_expiry,
             )
         except Exception:
+            self._retire_failed_issuance(session_id)
             raise BrokerDependencyUnavailable(
                 "Customer certificate issuer failed; request a fresh broker token"
             ) from None
 
         if not isinstance(certificate_pem, str) or "BEGIN CERTIFICATE" not in certificate_pem:
+            self._retire_failed_issuance(session_id)
             raise BrokerDependencyUnavailable(
                 "Customer certificate issuer returned invalid material"
             )
@@ -403,20 +449,21 @@ class DatabaseSessionBroker:
             if (
                 not self._certificate_issuer.verify_issued_certificate(
                     certificate_pem,
-                    database_role=database_principal.database_role,
+                    database_role=session_role,
                     public_key=public_key,
                     expires_at=certificate_expiry,
                     now=current,
                 )
                 or issued_public_key != requested_public_key
                 or len(common_names) != 1
-                or common_names[0].value != database_principal.database_role
+                or common_names[0].value != session_role
                 or certificate.not_valid_before_utc > current
                 or certificate.not_valid_after_utc > certificate_expiry
                 or certificate.not_valid_after_utc <= current
             ):
                 raise ValueError("Issued certificate does not match the approved session")
         except Exception:
+            self._retire_failed_issuance(session_id)
             raise BrokerDependencyUnavailable(
                 "Customer certificate issuer returned an unbound or invalid certificate"
             ) from None
@@ -424,8 +471,8 @@ class DatabaseSessionBroker:
         return IssuedDatabaseSession(
             certificate_pem=certificate_pem,
             expires_at=certificate_expiry,
-            database_role=database_principal.database_role,
-            session_id=uuid4(),
+            database_role=session_role,
+            session_id=session_id,
             issuer=principal.issuer,
             subject=principal.subject,
             tenant_id=principal.tenant_id,

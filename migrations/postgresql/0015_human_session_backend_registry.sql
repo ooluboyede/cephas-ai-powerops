@@ -47,6 +47,39 @@ $verify_control_role$;
 -- registered backends. This NOLOGIN role is a function owner, not a login.
 GRANT pg_signal_backend TO powerops_session_control;
 GRANT pg_read_all_stats TO powerops_session_control;
+
+DO $verify_control_memberships$
+DECLARE
+    v_control_oid oid;
+    v_expected_count integer;
+    v_unexpected_count integer;
+BEGIN
+    SELECT oid INTO STRICT v_control_oid
+      FROM pg_catalog.pg_roles
+     WHERE rolname = 'powerops_session_control';
+
+    SELECT count(*)::integer INTO v_expected_count
+      FROM pg_catalog.pg_auth_members AS membership
+      JOIN pg_catalog.pg_roles AS granted_role
+        ON granted_role.oid = membership.roleid
+     WHERE membership.member = v_control_oid
+       AND granted_role.rolname IN ('pg_signal_backend', 'pg_read_all_stats');
+
+    SELECT count(*)::integer INTO v_unexpected_count
+      FROM pg_catalog.pg_auth_members AS membership
+     WHERE (membership.member = v_control_oid
+            AND membership.roleid NOT IN (
+                SELECT oid FROM pg_catalog.pg_roles
+                 WHERE rolname IN ('pg_signal_backend', 'pg_read_all_stats')
+            ))
+        OR membership.roleid = v_control_oid;
+
+    IF v_expected_count <> 2 OR v_unexpected_count <> 0 THEN
+        RAISE EXCEPTION
+            'powerops_session_control has an unexpected effective role membership graph';
+    END IF;
+END
+$verify_control_memberships$;
 GRANT USAGE ON SCHEMA powerops_security TO powerops_session_control;
 GRANT SELECT ON powerops_security.cluster_identity,
                 powerops_security.human_session_actor_binding,

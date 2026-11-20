@@ -24,14 +24,14 @@ $$;
 GRANT USAGE ON SCHEMA powerops_security TO pwr_revocation_audit_test;
 GRANT EXECUTE ON FUNCTION
     powerops_security.record_human_session_revocation_audit(
-        text, text, uuid, text, integer, boolean, boolean, boolean
+        text, text, uuid, text, integer, boolean, boolean, boolean, jsonb, text
     ) TO pwr_revocation_audit_test;
 
 DO $$
 BEGIN
     IF NOT has_function_privilege(
         'pwr_revocation_audit_test',
-        'powerops_security.record_human_session_revocation_audit(text,text,uuid,text,integer,boolean,boolean,boolean)',
+        'powerops_security.record_human_session_revocation_audit(text,text,uuid,text,integer,boolean,boolean,boolean,jsonb,text)',
         'EXECUTE'
     ) THEN
         RAISE EXCEPTION 'audit writer lacks required function execution';
@@ -74,7 +74,9 @@ SELECT powerops_security.record_human_session_revocation_audit(
     0,
     true,
     true,
-    true
+    true,
+    jsonb_build_object('session_id', :'session_id'::text),
+    'integration-test-receipt-signature'
 );
 SQL
 
@@ -94,7 +96,11 @@ SELECT powerops_security.record_human_session_revocation_audit(
     'human_database_session_revoked',
     'oidc|integration-test-subject',
     'ffffffff-ffff-4fff-8fff-ffffffffffff'::uuid,
-    'verified', 0, true, true, true
+    'verified', 0, true, true, true,
+    jsonb_build_object(
+        'session_id', 'ffffffff-ffff-4fff-8fff-ffffffffffff'
+    ),
+    'integration-test-receipt-signature'
 );
 SQL
 then

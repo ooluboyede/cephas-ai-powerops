@@ -64,7 +64,8 @@ def build_human_session_revocation_coordinator(
         termination_connection_factory=termination_connection_factory,
     )
     audit = PostgresSessionRevocationAudit(
-        connection_factory=audit_connection_factory
+        connection_factory=audit_connection_factory,
+        credential_receipt_verifier=credential_receipt_verifier,
     )
     return HumanSessionRevocationCoordinator(
         credential_store=credential_store,

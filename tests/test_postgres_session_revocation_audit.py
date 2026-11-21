@@ -208,7 +208,10 @@ def test_audit_sink_rejects_forged_receipt_before_connecting():
 
 def test_audit_sink_commit_uncertainty_is_generic_and_fails_closed():
     connection = Connection(fail_commit=True)
-    audit = PostgresSessionRevocationAudit(connection_factory=lambda: connection)
+    audit = PostgresSessionRevocationAudit(
+        connection_factory=lambda: connection,
+        credential_receipt_verifier=receipt_verifier(),
+    )
 
     with pytest.raises(SessionRevocationError) as error:
         audit.record_event(**event(uuid4()))

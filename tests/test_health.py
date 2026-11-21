@@ -11,12 +11,9 @@ def test_liveness_is_explicitly_process_only() -> None:
     assert response.json() == {"status": "alive", "service": "powerops"}
 
 
-def test_readiness_is_explicitly_limited_to_bootstrap() -> None:
+def test_readiness_fails_closed_without_oidc_and_database() -> None:
     response = client.get("/health/ready")
-    assert response.status_code == 200
-    assert response.json() == {
-        "status": "ready",
-        "stage": "foundation",
-        "readiness_scope": "bootstrap_only",
-        "dependency_checks": "not_configured",
-    }
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "OIDC authentication and BU-scoped PostgreSQL must be configured"
+    )

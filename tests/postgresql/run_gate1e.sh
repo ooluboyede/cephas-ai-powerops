@@ -27,7 +27,8 @@ for migration in \
   migrations/postgresql/0002_scope_identity.sql \
   migrations/postgresql/0003_scope_login_lifecycle.sql \
   migrations/postgresql/0004_row_scope_predicate.sql \
-  migrations/postgresql/0005_operational_schema_rls.sql
+  migrations/postgresql/0005_operational_schema_rls.sql \
+  migrations/postgresql/0007_runtime_role_membership_fence.sql
 do
   echo "Applying $migration"
   psql_admin -f "$migration"
@@ -135,9 +136,9 @@ SELECT rolname || ':' || rolcanlogin || ':' || rolsuper || ':' ||
 FROM pg_catalog.pg_roles
 WHERE rolname LIKE 'pwr_gate1e_%'
 ORDER BY rolname" | while IFS=: read -r role canlogin super createdb createrole inherit replication bypassrls; do
-  [[ "$canlogin" == "t" && "$super" == "f" && "$createdb" == "f" &&
-     "$createrole" == "f" && "$inherit" == "f" && "$replication" == "f" &&
-     "$bypassrls" == "f" ]] || {
+  [[ "$canlogin" == "true" && "$super" == "false" && "$createdb" == "false" &&
+     "$createrole" == "false" && "$inherit" == "false" && "$replication" == "false" &&
+     "$bypassrls" == "false" ]] || {
        echo "Unsafe runtime role attributes: $role" >&2
        exit 1
      }

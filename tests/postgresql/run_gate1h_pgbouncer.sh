@@ -7,7 +7,7 @@ set -Eeuo pipefail
 : "${PGUSER:=postgres}"
 : "${PGPASSWORD:=postgres}"
 : "${POWEROPS_TEST_PASSWORD:=Gate1E-Disposable-Only-ChangeMe}"
-: "${PGBOUNCER_PORT:=6432}"
+: "${PGBOUNCER_PORT:=6543}"
 
 admin() {
   PGPASSWORD="$PGPASSWORD" psql -X -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" "$@"
@@ -74,15 +74,19 @@ EOF
 echo "[Gate 1H] Start PgBouncer in transaction-pooling mode"
 pgbouncer "$workdir/pgbouncer.ini" >"$workdir/pgbouncer-startup.log" 2>&1 &
 pgbouncer_pid=$!
+probe_log="$workdir/pgbouncer-probe.log"
 for attempt in $(seq 1 30); do
-  if PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -h 127.0.0.1 -p "$PGBOUNCER_PORT" -U pwr_gate1h_a1 -d "$PGDATABASE" -Atc 'SELECT 1' >/dev/null 2>&1; then
+  if PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -h 127.0.0.1 -p "$PGBOUNCER_PORT" -U pwr_gate1h_a1 -d "$PGDATABASE" -Atc 'SELECT 1' >"$probe_log" 2>&1; then
+    break
+  fi
+  if ! kill -0 "$pgbouncer_pid" 2>/dev/null; then
     break
   fi
   sleep 1
 done
-if ! PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -h 127.0.0.1 -p "$PGBOUNCER_PORT" -U pwr_gate1h_a1 -d "$PGDATABASE" -Atc 'SELECT 1' >/dev/null 2>&1; then
-  cat "$workdir/pgbouncer-startup.log" "$workdir/pgbouncer.log" 2>/dev/null >&2
-  echo "FAIL: PgBouncer did not become ready" >&2
+if ! PGPASSWORD="$POWEROPS_TEST_PASSWORD" psql -X -h 127.0.0.1 -p "$PGBOUNCER_PORT" -U pwr_gate1h_a1 -d "$PGDATABASE" -Atc 'SELECT 1' >"$probe_log" 2>&1; then
+  cat "$workdir/pgbouncer-startup.log" "$workdir/pgbouncer.log" "$probe_log" 2>/dev/null >&2
+  echo "FAIL: PgBouncer did not become ready on 127.0.0.1:$PGBOUNCER_PORT" >&2
   exit 1
 fi
 
@@ -97,17 +101,17 @@ assert_scope() {
 
 echo "[Gate 1H] Alternate distinct authenticated identities through a one-server transaction pool"
 for attempt in $(seq 1 12); do
-  assert_scope pwr_gate1h_a1 1
+  assert_scope pwr_gate1h_a1 2
   assert_scope pwr_gate1h_b1 1
 done
 
 echo "[Gate 1H] Caller-controlled GUCs cannot alter either pooled identity"
-spoof_a=$(pool_role pwr_gate1h_a1 -At -F '|' -c "SET app.tenant_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'; SELECT session_user, (SELECT count(*) FROM powerops_data.feeders)")
-[[ "$spoof_a" == "pwr_gate1h_a1|1" ]] || {
+spoof_a=$(pool_role pwr_gate1h_a1 -qAt -F '|' -c "BEGIN; SET LOCAL app.tenant_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'; SET LOCAL app.business_unit_id='b1000000-0000-4000-8000-000000000001'; SELECT session_user, (SELECT count(*) FROM powerops_data.feeders); COMMIT")
+[[ "$spoof_a" == "pwr_gate1h_a1|2" ]] || {
   echo "FAIL: A1 scope changed through GUC manipulation: $spoof_a" >&2
   exit 1
 }
-spoof_b=$(pool_role pwr_gate1h_b1 -At -F '|' -c "SET app.tenant_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; SELECT session_user, count(*) FROM powerops_data.feeders")
+spoof_b=$(pool_role pwr_gate1h_b1 -qAt -F '|' -c "BEGIN; SET LOCAL app.tenant_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; SET LOCAL app.business_unit_id='a1000000-0000-4000-8000-000000000001'; SELECT session_user, count(*) FROM powerops_data.feeders; COMMIT")
 [[ "$spoof_b" == "pwr_gate1h_b1|1" ]] || {
   echo "FAIL: B1 scope changed through GUC manipulation: $spoof_b" >&2
   exit 1

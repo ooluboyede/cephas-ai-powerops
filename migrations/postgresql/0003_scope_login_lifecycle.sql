@@ -71,6 +71,12 @@ BEGIN
         p_role_name
     );
 
+    -- PostgreSQL 16+ can grant the creating CREATEROLE principal membership
+    -- in the newly created role. Remove it before the runtime identity is usable.
+    EXECUTE pg_catalog.format(
+        'REVOKE %I FROM powerops_provisioner', p_role_name
+    );
+
     SELECT r.oid INTO STRICT v_role_oid
       FROM pg_catalog.pg_roles AS r
      WHERE r.rolname = p_role_name;

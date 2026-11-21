@@ -223,7 +223,10 @@ def test_audit_sink_commit_uncertainty_is_generic_and_fails_closed():
 
 def test_audit_sink_requires_database_confirmation():
     connection = Connection(row=None)
-    audit = PostgresSessionRevocationAudit(connection_factory=lambda: connection)
+    audit = PostgresSessionRevocationAudit(
+        connection_factory=lambda: connection,
+        credential_receipt_verifier=receipt_verifier(),
+    )
     with pytest.raises(SessionRevocationError):
         audit.record_event(**event(uuid4()))
     assert connection.rollbacks == 1

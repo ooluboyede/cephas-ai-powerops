@@ -58,6 +58,10 @@ CREATE TABLE powerops_security.human_session_revocation_audit (
     credential_revoked boolean NOT NULL,
     credential_receipt_payload jsonb,
     credential_receipt_signature text,
+    credential_receipt_verification_method text CHECK (
+        credential_receipt_verification_method IS NULL
+        OR credential_receipt_verification_method = 'application_ed25519'
+    ),
     admission_fenced boolean NOT NULL,
     backend_termination_verified boolean NOT NULL,
     recorded_by name NOT NULL DEFAULT session_user,
@@ -109,10 +113,77 @@ BEGIN
       OR p_backend_termination_verified IS NULL
       OR ((p_credential_receipt_payload IS NULL)
           <> (p_credential_receipt_signature IS NULL))
-      OR (p_outcome = 'verified'
-          AND p_credential_receipt_payload IS NOT NULL
-          AND p_credential_receipt_payload ->> 'session_id'
-              IS DISTINCT FROM p_session_id::text) THEN
+      OR (p_outcome = 'verified' AND (
+          pg_catalog.jsonb_typeof(p_credential_receipt_payload) <> 'object'
+          OR p_credential_receipt_payload ->> 'session_id'
+              IS DISTINCT FROM p_session_id::text
+          OR p_credential_receipt_payload ->> 'version' IS DISTINCT FROM '1'
+          OR p_credential_receipt_payload ->> 'outcome' IS DISTINCT FROM 'revoked'
+          OR p_credential_receipt_payload ->> 'issuer' NOT LIKE 'https://%'
+          OR length(p_credential_receipt_payload ->> 'issuer') NOT BETWEEN 9 AND 300
+          OR length(p_credential_receipt_payload ->> 'key_id') NOT BETWEEN 1 AND 128
+          OR length(p_credential_receipt_payload ->> 'revoked_at') NOT BETWEEN 20 AND 50
+          OR p_credential_receipt_signature !~ '^[A-Za-z0-9+/]{86}==
+        RAISE EXCEPTION 'invalid session revocation audit event'
+            USING ERRCODE = '22023';
+    END IF;
+
+    IF p_outcome = 'verified' THEN
+        -- The audit writer's assertion is not sufficient for database containment:
+        -- independently prove this exact session is fenced and has no live
+        -- registered backend. The Ed25519 receipt signature is verified by the
+        -- application against customer-pinned provider keys before this call;
+        -- PostgreSQL validates receipt structure/session binding and retains
+        -- the signed evidence for independent offline verification. Core
+        -- PostgreSQL does not natively verify Ed25519 signatures.
+        v_remaining_backends :=
+            powerops_security.count_human_session_backends(p_session_id);
+        IF v_remaining_backends <> 0
+           OR NOT p_admission_fenced
+           OR NOT p_backend_termination_verified
+           OR NOT p_credential_revoked
+           OR p_credential_receipt_payload IS NULL
+           OR p_credential_receipt_signature IS NULL THEN
+            RAISE EXCEPTION
+                'verified audit event lacks independently confirmed containment'
+                USING ERRCODE = '22023';
+        END IF;
+    END IF;
+
+    INSERT INTO powerops_security.human_session_revocation_audit (
+        event_type, actor_subject, session_id, outcome,
+        terminated_backend_count, credential_revoked,
+        credential_receipt_payload, credential_receipt_signature,
+        credential_receipt_verification_method,
+        admission_fenced, backend_termination_verified
+    ) VALUES (
+        p_event_type, p_actor_subject, p_session_id, p_outcome,
+        p_terminated_backend_count, p_credential_revoked,
+        p_credential_receipt_payload, p_credential_receipt_signature,
+        CASE WHEN p_outcome = 'verified' THEN 'application_ed25519' ELSE NULL END,
+        p_admission_fenced, p_backend_termination_verified
+    )
+    RETURNING audit_id INTO v_audit_id;
+
+    RETURN v_audit_id;
+END
+$function$;
+
+ALTER FUNCTION powerops_security.record_human_session_revocation_audit(
+    text, text, uuid, text, integer, boolean, boolean, boolean, jsonb, text
+) OWNER TO powerops_revocation_auditor;
+REVOKE ALL ON FUNCTION powerops_security.record_human_session_revocation_audit(
+    text, text, uuid, text, integer, boolean, boolean, boolean, jsonb, text
+) FROM PUBLIC;
+
+-- Customer DBA must grant EXECUTE only to a separately authenticated,
+-- dedicated audit-writer login. Do not grant table INSERT/UPDATE/DELETE.
+COMMIT;
+
+          OR pg_catalog.octet_length(
+              pg_catalog.decode(p_credential_receipt_signature, 'base64')
+          ) <> 64
+      )) THEN
         RAISE EXCEPTION 'invalid session revocation audit event'
             USING ERRCODE = '22023';
     END IF;

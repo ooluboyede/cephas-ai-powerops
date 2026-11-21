@@ -8,6 +8,7 @@ from uuid import UUID
 
 from powerops.credential_revocation_attestation import (
     CredentialRevocationReceipt,
+    CredentialRevocationReceiptVerifier,
     canonical_receipt_payload,
 )
 from powerops.session_revocation import SessionRevocationError
@@ -23,10 +24,18 @@ class PostgresSessionRevocationAudit:
     SECURITY DEFINER function only. It must not receive direct table DML.
     """
 
-    def __init__(self, *, connection_factory: AuditConnectionFactory) -> None:
+    def __init__(
+        self,
+        *,
+        connection_factory: AuditConnectionFactory,
+        credential_receipt_verifier: CredentialRevocationReceiptVerifier,
+    ) -> None:
         if not callable(connection_factory):
             raise ValueError("A dedicated PostgreSQL audit connection factory is required")
+        if not callable(getattr(credential_receipt_verifier, "verify", None)):
+            raise ValueError("A customer-pinned credential receipt verifier is required")
         self._connection_factory = connection_factory
+        self._credential_receipt_verifier = credential_receipt_verifier
 
     def record_event(
         self,
@@ -71,6 +80,21 @@ class PostgresSessionRevocationAudit:
             credential_revoked and admission_fenced and backend_termination_verified
         ):
             raise SessionRevocationError("Verified audit outcome contradicts containment state")
+
+        if outcome == "verified":
+            try:
+                receipt_verified = (
+                    isinstance(credential_receipt, CredentialRevocationReceipt)
+                    and self._credential_receipt_verifier.verify(
+                        credential_receipt, session_id=session_id
+                    )
+                )
+            except Exception:
+                receipt_verified = False
+            if not receipt_verified:
+                raise SessionRevocationError(
+                    "Verified audit outcome requires a valid customer-signed receipt"
+                ) from None
 
         if credential_receipt is not None:
             try:

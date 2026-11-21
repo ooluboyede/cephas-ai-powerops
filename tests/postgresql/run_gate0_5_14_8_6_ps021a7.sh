@@ -69,10 +69,11 @@ SESSION_ID='a1400000-0000-4000-8000-000000000002'
 mapfile -t RECEIPT_FIELDS < <(python - "$SESSION_ID" <<'PY'
 import base64
 import json
+import subprocess
 import sys
+import tempfile
 from datetime import UTC, datetime
-
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from pathlib import Path
 
 session_id = sys.argv[1]
 payload = {
@@ -86,9 +87,40 @@ payload = {
 canonical = json.dumps(
     payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
 ).encode("ascii")
-private_key = Ed25519PrivateKey.generate()
-signature = private_key.sign(canonical)
-private_key.public_key().verify(signature, canonical)
+
+# Use the runner's OpenSSL binary so this integration harness does not depend
+# on an undeclared Python cryptography package.
+with tempfile.TemporaryDirectory() as directory:
+    root = Path(directory)
+    private_key = root / "receipt-ed25519.pem"
+    public_key = root / "receipt-ed25519.pub.pem"
+    message = root / "receipt.json"
+    signature_file = root / "receipt.sig"
+    message.write_bytes(canonical)
+    subprocess.run(
+        ["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(private_key)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["openssl", "pkey", "-in", str(private_key), "-pubout", "-out", str(public_key)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["openssl", "pkeyutl", "-sign", "-rawin", "-inkey", str(private_key),
+         "-in", str(message), "-out", str(signature_file)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["openssl", "pkeyutl", "-verify", "-rawin", "-pubin", "-inkey",
+         str(public_key), "-in", str(message), "-sigfile", str(signature_file)],
+        check=True,
+        capture_output=True,
+    )
+    signature = signature_file.read_bytes()
+
 print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
 print(base64.b64encode(signature).decode("ascii"))
 PY

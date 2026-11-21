@@ -112,35 +112,48 @@ BEGIN
       OR p_admission_fenced IS NULL
       OR p_backend_termination_verified IS NULL
       OR ((p_credential_receipt_payload IS NULL)
-          <> (p_credential_receipt_signature IS NULL))
-      OR (p_outcome = 'verified' AND (
-          p_credential_receipt_payload IS NULL
-          OR pg_catalog.jsonb_typeof(p_credential_receipt_payload)
-              IS DISTINCT FROM 'object'
-          OR NOT (p_credential_receipt_payload ?& ARRAY[
-              'issuer', 'key_id', 'outcome', 'revoked_at', 'session_id', 'version'
-          ]::text[])
-          OR p_credential_receipt_payload ->> 'session_id'
-              IS DISTINCT FROM p_session_id::text
-          OR p_credential_receipt_payload ->> 'version' IS DISTINCT FROM '1'
-          OR p_credential_receipt_payload ->> 'outcome' IS DISTINCT FROM 'revoked'
-          OR p_credential_receipt_payload ->> 'issuer' IS NULL
-          OR p_credential_receipt_payload ->> 'issuer' NOT LIKE 'https://%'
-          OR length(p_credential_receipt_payload ->> 'issuer') NOT BETWEEN 9 AND 300
-          OR p_credential_receipt_payload ->> 'key_id' IS NULL
-          OR length(p_credential_receipt_payload ->> 'key_id') NOT BETWEEN 1 AND 128
-          OR p_credential_receipt_payload ->> 'revoked_at' IS NULL
-          OR length(p_credential_receipt_payload ->> 'revoked_at') NOT BETWEEN 20 AND 50
-          OR p_credential_receipt_signature IS NULL
-          OR length(p_credential_receipt_signature) <> 88
-          OR right(p_credential_receipt_signature, 2) <> '=='
-          OR left(p_credential_receipt_signature, 86) !~ '^[A-Za-z0-9+/]{86}$'
-          OR pg_catalog.octet_length(
-              pg_catalog.decode(p_credential_receipt_signature, 'base64')
-          ) <> 64
-      )) THEN
+          <> (p_credential_receipt_signature IS NULL)) THEN
         RAISE EXCEPTION 'invalid session revocation audit event'
             USING ERRCODE = '22023';
+    END IF;
+
+    IF p_outcome = 'verified' THEN
+        IF p_credential_receipt_payload IS NULL
+           OR pg_catalog.jsonb_typeof(p_credential_receipt_payload)
+                IS DISTINCT FROM 'object' THEN
+            RAISE EXCEPTION 'verified audit event requires a receipt object'
+                USING ERRCODE = '22023';
+        END IF;
+        IF NOT (p_credential_receipt_payload ?& ARRAY[
+            'issuer', 'key_id', 'outcome', 'revoked_at', 'session_id', 'version'
+        ]::text[]) THEN
+            RAISE EXCEPTION 'credential receipt is missing required fields'
+                USING ERRCODE = '22023';
+        END IF;
+        IF p_credential_receipt_payload ->> 'session_id'
+                IS DISTINCT FROM p_session_id::text
+           OR p_credential_receipt_payload ->> 'version' IS DISTINCT FROM '1'
+           OR p_credential_receipt_payload ->> 'outcome' IS DISTINCT FROM 'revoked'
+           OR p_credential_receipt_payload ->> 'issuer' IS NULL
+           OR p_credential_receipt_payload ->> 'issuer' NOT LIKE 'https://%'
+           OR length(p_credential_receipt_payload ->> 'issuer') NOT BETWEEN 9 AND 300
+           OR p_credential_receipt_payload ->> 'key_id' IS NULL
+           OR length(p_credential_receipt_payload ->> 'key_id') NOT BETWEEN 1 AND 128
+           OR p_credential_receipt_payload ->> 'revoked_at' IS NULL
+           OR length(p_credential_receipt_payload ->> 'revoked_at') NOT BETWEEN 20 AND 50 THEN
+            RAISE EXCEPTION 'credential receipt identity or metadata is invalid'
+                USING ERRCODE = '22023';
+        END IF;
+        IF p_credential_receipt_signature IS NULL
+           OR length(p_credential_receipt_signature) <> 88
+           OR right(p_credential_receipt_signature, 2) <> '=='
+           OR left(p_credential_receipt_signature, 86) !~ '^[A-Za-z0-9+/]{86}$'
+           OR pg_catalog.octet_length(
+               pg_catalog.decode(p_credential_receipt_signature, 'base64')
+           ) <> 64 THEN
+            RAISE EXCEPTION 'credential receipt signature envelope is invalid'
+                USING ERRCODE = '22023';
+        END IF;
     END IF;
 
     IF p_outcome = 'verified' THEN

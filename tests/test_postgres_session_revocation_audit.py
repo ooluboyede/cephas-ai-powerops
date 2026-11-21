@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from base64 import b64encode
 from datetime import UTC, datetime
 from uuid import uuid4

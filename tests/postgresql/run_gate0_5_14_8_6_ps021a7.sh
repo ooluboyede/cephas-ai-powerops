@@ -63,9 +63,43 @@ SQL
 # verifies that its registered backend count is zero before this harness runs.
 SESSION_ID='a1400000-0000-4000-8000-000000000002'
 
+# Generate a real Ed25519-signed provider receipt. PostgreSQL validates the
+# receipt envelope and retains the signature; the application verifier checks
+# this signature against customer-pinned provider keys before calling SQL.
+mapfile -t RECEIPT_FIELDS < <(python - "$SESSION_ID" <<'PY'
+import base64
+import json
+import sys
+from datetime import UTC, datetime
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+session_id = sys.argv[1]
+payload = {
+    "issuer": "https://vault.integration.example",
+    "key_id": "integration-test-key",
+    "outcome": "revoked",
+    "revoked_at": datetime.now(UTC).isoformat(timespec="microseconds"),
+    "session_id": session_id,
+    "version": 1,
+}
+canonical = json.dumps(
+    payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+).encode("ascii")
+private_key = Ed25519PrivateKey.generate()
+signature = private_key.sign(canonical)
+private_key.public_key().verify(signature, canonical)
+print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+print(base64.b64encode(signature).decode("ascii"))
+PY
+)
+RECEIPT_JSON="${RECEIPT_FIELDS[0]}"
+RECEIPT_SIGNATURE="${RECEIPT_FIELDS[1]}"
+
 PGPASSWORD=Gate1E-Disposable-Only-ChangeMe psql \
   "host=${PGHOST:-127.0.0.1} port=${PGPORT:-5432} dbname=${PGDATABASE:-postgres} user=pwr_revocation_audit_test" \
-  -X -v ON_ERROR_STOP=1 -v session_id="$SESSION_ID" <<'SQL'
+  -X -v ON_ERROR_STOP=1 -v session_id="$SESSION_ID" \
+  -v receipt_payload="$RECEIPT_JSON" -v receipt_signature="$RECEIPT_SIGNATURE" <<'SQL'
 SELECT powerops_security.record_human_session_revocation_audit(
     'human_database_session_revoked',
     'oidc|integration-test-subject',
@@ -75,13 +109,13 @@ SELECT powerops_security.record_human_session_revocation_audit(
     true,
     true,
     true,
-    jsonb_build_object('session_id', :'session_id'::text),
-    'integration-test-receipt-signature'
+    :'receipt_payload'::jsonb,
+    :'receipt_signature'
 );
 SQL
 
 AUDIT_ROWS="$(psql "$POWEROPS_TEST_ADMIN_DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
-  -c "SELECT count(*) FROM powerops_security.human_session_revocation_audit WHERE session_id = '$SESSION_ID'::uuid AND event_type = 'human_database_session_revoked' AND outcome = 'verified' AND credential_revoked AND admission_fenced AND backend_termination_verified")"
+  -c "SELECT count(*) FROM powerops_security.human_session_revocation_audit WHERE session_id = '$SESSION_ID'::uuid AND event_type = 'human_database_session_revoked' AND outcome = 'verified' AND credential_revoked AND admission_fenced AND backend_termination_verified AND credential_receipt_verification_method = 'application_ed25519'")"
 if [[ "$AUDIT_ROWS" != "1" ]]; then
   echo "Expected exactly one verified append-only audit row; got: $AUDIT_ROWS" >&2
   exit 1

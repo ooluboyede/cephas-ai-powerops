@@ -131,7 +131,10 @@ def event(session_id):
 def test_audit_sink_calls_only_append_function_and_commits():
     session_id = uuid4()
     connection = Connection()
-    audit = PostgresSessionRevocationAudit(connection_factory=lambda: connection)
+    audit = PostgresSessionRevocationAudit(
+        connection_factory=lambda: connection,
+        credential_receipt_verifier=receipt_verifier(),
+    )
     payload = event(session_id)
 
     audit.record_event(**payload)
@@ -163,7 +166,10 @@ def test_audit_sink_rejects_invalid_or_contradictory_event_before_connecting():
         called = True
         return Connection()
 
-    audit = PostgresSessionRevocationAudit(connection_factory=factory)
+    audit = PostgresSessionRevocationAudit(
+        connection_factory=factory,
+        credential_receipt_verifier=receipt_verifier(),
+    )
     payload = event(uuid4())
     payload["terminated_backend_count"] = True
     with pytest.raises(SessionRevocationError):
@@ -173,6 +179,29 @@ def test_audit_sink_rejects_invalid_or_contradictory_event_before_connecting():
     payload = event(uuid4())
     payload["backend_termination_verified"] = False
     with pytest.raises(SessionRevocationError):
+        audit.record_event(**payload)
+    assert not called
+
+
+def test_audit_sink_rejects_forged_receipt_before_connecting():
+    called = False
+
+    def factory():
+        nonlocal called
+        called = True
+        return Connection()
+
+    audit = PostgresSessionRevocationAudit(
+        connection_factory=factory,
+        credential_receipt_verifier=receipt_verifier(),
+    )
+    payload = event(uuid4())
+    receipt = payload["credential_receipt"]
+    payload["credential_receipt"] = replace(
+        receipt, signature_b64="A" + receipt.signature_b64[1:]
+    )
+
+    with pytest.raises(SessionRevocationError, match="valid customer-signed receipt"):
         audit.record_event(**payload)
     assert not called
 

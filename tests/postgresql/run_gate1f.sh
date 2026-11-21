@@ -72,9 +72,29 @@ DECLARE r record;
 BEGIN
   FOR r IN SELECT rolname, oid FROM pg_catalog.pg_roles WHERE rolname LIKE 'pwr_gate1e_%'
   LOOP
-    IF EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members m
-               WHERE m.member=r.oid OR m.roleid=r.oid) THEN
-      RAISE EXCEPTION 'runtime role has a role membership: %', r.rolname;
+    -- A runtime login must never be a member of another role. PostgreSQL
+    -- 16+ has one unavoidable reverse-direction bootstrap grant: the
+    -- CREATEROLE provisioner is an ADMIN member of the created runtime role.
+    -- It is safe only when neither SET nor INHERIT is enabled.
+    IF EXISTS (
+      SELECT 1
+        FROM pg_catalog.pg_auth_members m
+        JOIN pg_catalog.pg_roles member_role ON member_role.oid = m.member
+        JOIN pg_catalog.pg_roles grantor ON grantor.oid = m.grantor
+       WHERE m.member = r.oid
+          OR (
+            m.roleid = r.oid
+            AND (
+              current_setting('server_version_num')::integer < 160000
+              OR member_role.rolname <> 'powerops_provisioner'
+              OR NOT m.admin_option
+              OR NOT grantor.rolsuper
+              OR COALESCE((to_jsonb(m)->>'inherit_option')::boolean, true)
+              OR COALESCE((to_jsonb(m)->>'set_option')::boolean, true)
+            )
+          )
+    ) THEN
+      RAISE EXCEPTION 'runtime role has an unsafe role membership: %', r.rolname;
     END IF;
     IF NOT has_schema_privilege(r.rolname,'powerops_data','USAGE')
        OR has_schema_privilege(r.rolname,'powerops_data','CREATE') THEN

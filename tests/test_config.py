@@ -18,3 +18,8 @@ def test_settings_accept_explicit_deployment_values() -> None:
     assert settings.app_name == "PowerOps test"
     assert settings.app_env == "test"
     assert settings.log_level == "WARNING"
+
+
+def test_blank_database_url_is_treated_as_unconfigured() -> None:
+    settings = Settings(_env_file=None, database_url="")
+    assert settings.database_url is None
